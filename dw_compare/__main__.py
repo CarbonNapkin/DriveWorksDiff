@@ -6,20 +6,65 @@ DriveWorks Project Comparison Tool - CLI Entry Point
 import sys
 import argparse
 import webbrowser
+import zipfile
+import tempfile
+import shutil
+import atexit
 from pathlib import Path
 
 from .parsers import load_project
 from .report import generate_html_report
 
+# Track temp dirs for cleanup
+_temp_dirs = []
+
+
+def extract_driveprojx(file_path: Path) -> Path:
+    """Extract .driveprojx file (it's just a zip) to temp directory"""
+    temp_dir = tempfile.mkdtemp(prefix='dw_compare_')
+    _temp_dirs.append(temp_dir)
+    
+    print(f"  Extracting {file_path.name}...")
+    with zipfile.ZipFile(file_path, 'r') as zf:
+        zf.extractall(temp_dir)
+    
+    return Path(temp_dir)
+
+
+def cleanup_temp_dirs():
+    """Remove any temp directories created during extraction"""
+    for temp_dir in _temp_dirs:
+        try:
+            shutil.rmtree(temp_dir)
+        except Exception:
+            pass
+
+
+# Register cleanup on exit
+atexit.register(cleanup_temp_dirs)
+
+
+def resolve_input(path: Path) -> Path:
+    """Resolve input - extract .driveprojx files, pass through folders"""
+    if path.is_dir():
+        return path
+    elif path.suffix.lower() == '.driveprojx' and path.is_file():
+        return extract_driveprojx(path)
+    else:
+        return path  # Let validation catch invalid paths
+
 
 def find_project_folders() -> tuple[Path, Path] | None:
-    """Auto-detect two project folders in current directory"""
+    """Auto-detect two project folders or .driveprojx files in current directory"""
     cwd = Path.cwd()
     
     # Get all subdirectories (excluding hidden)
     subdirs = sorted([d for d in cwd.iterdir() if d.is_dir() and not d.name.startswith('.')])
     
-    # Look for common naming patterns
+    # Get all .driveprojx files
+    projx_files = sorted(cwd.glob('*.driveprojx'))
+    
+    # Look for common naming patterns in folders
     patterns = [
         ('old', 'new'),
         ('prod', 'dev'),
@@ -35,27 +80,41 @@ def find_project_folders() -> tuple[Path, Path] | None:
         if old_matches and new_matches:
             return old_matches[0], new_matches[0]
     
-    # If exactly two folders, use them (sorted alphabetically = old, new)
+    # Check .driveprojx files for patterns
+    for old_name, new_name in patterns:
+        old_matches = [f for f in projx_files if old_name in f.stem.lower()]
+        new_matches = [f for f in projx_files if new_name in f.stem.lower()]
+        if old_matches and new_matches:
+            return old_matches[0], new_matches[0]
+    
+    # If exactly two folders, use them
     if len(subdirs) == 2:
         return subdirs[0], subdirs[1]
+    
+    # If exactly two .driveprojx files, use them
+    if len(projx_files) == 2:
+        return projx_files[0], projx_files[1]
     
     return None
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Compare two DriveWorks project folders and generate HTML report',
+        description='Compare two DriveWorks projects and generate HTML report',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
 Examples:
-    python -m dw_compare old_project/ new_project/ -o comparison.html
+    python -m dw_compare old.driveprojx new.driveprojx
+    python -m dw_compare old_folder/ new_folder/ -o comparison.html
     
-    # Or just run in a folder containing two project folders:
+    # Or just run in a folder containing two projects:
     python -m dw_compare
         ''')
     
-    parser.add_argument('old_folder', type=Path, nargs='?', help='Path to old project folder')
-    parser.add_argument('new_folder', type=Path, nargs='?', help='Path to new project folder')
+    parser.add_argument('old_project', type=Path, nargs='?', 
+                       help='Path to old project folder or .driveprojx file')
+    parser.add_argument('new_project', type=Path, nargs='?', 
+                       help='Path to new project folder or .driveprojx file')
     parser.add_argument('-o', '--output', type=Path, default=Path('dw_comparison.html'),
                        help='Output HTML file (default: dw_comparison.html)')
     parser.add_argument('--no-open', action='store_true',
@@ -63,34 +122,42 @@ Examples:
     
     args = parser.parse_args()
     
-    # Auto-detect folders if not provided
-    if args.old_folder is None or args.new_folder is None:
-        print("No folders specified, looking for project folders...")
+    # Auto-detect projects if not provided
+    if args.old_project is None or args.new_project is None:
+        print("No projects specified, looking for project folders or .driveprojx files...")
         found = find_project_folders()
         if found:
-            args.old_folder, args.new_folder = found
-            print(f"  Found: {args.old_folder.name} → {args.new_folder.name}")
+            args.old_project, args.new_project = found
+            print(f"  Found: {args.old_project.name} → {args.new_project.name}")
         else:
-            print("Error: Could not auto-detect project folders.")
-            print("Either provide two folder arguments, or place exactly two project folders")
-            print("in the same directory as this script.")
+            print("Error: Could not auto-detect projects.")
+            print("Provide two folder or .driveprojx arguments, or place exactly two")
+            print("projects in the same directory as this script.")
             sys.exit(1)
     
-    if not args.old_folder.is_dir():
-        print(f"Error: {args.old_folder} is not a directory")
+    # Store original names before extracting
+    old_name = args.old_project.stem if args.old_project.suffix.lower() == '.driveprojx' else args.old_project.name
+    new_name = args.new_project.stem if args.new_project.suffix.lower() == '.driveprojx' else args.new_project.name
+    
+    # Resolve inputs (extract .driveprojx if needed)
+    old_folder = resolve_input(args.old_project)
+    new_folder = resolve_input(args.new_project)
+    
+    if not old_folder.is_dir():
+        print(f"Error: {args.old_project} is not a directory or .driveprojx file")
         sys.exit(1)
-    if not args.new_folder.is_dir():
-        print(f"Error: {args.new_folder} is not a directory")
+    if not new_folder.is_dir():
+        print(f"Error: {args.new_project} is not a directory or .driveprojx file")
         sys.exit(1)
     
-    print(f"Loading old project: {args.old_folder}")
-    old_proj = load_project(args.old_folder)
+    print(f"Loading old project: {old_name}")
+    old_proj = load_project(old_folder)
     
-    print(f"Loading new project: {args.new_folder}")
-    new_proj = load_project(args.new_folder)
+    print(f"Loading new project: {new_name}")
+    new_proj = load_project(new_folder)
     
     print("Generating comparison report...")
-    html = generate_html_report(old_proj, new_proj, args.old_folder.name, args.new_folder.name)
+    html = generate_html_report(old_proj, new_proj, old_name, new_name)
     
     args.output.write_text(html, encoding='utf-8')
     print(f"✅ Report saved to: {args.output}")

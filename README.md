@@ -4,13 +4,14 @@ A command-line tool to compare two versions of a DriveWorks project and generate
 
 ## Features
 
+- **Direct .driveprojx support** - Pass project files directly, no manual extraction needed
 - **Recursive scanning** - Finds all DriveWorks XML files in nested folders
 - **Compares everything** - Variables, Constants, Special Variables, Calculation Tables, Component Tasks, Documents, Lookup Tables
 - **Inline diffs** - See exactly what changed in formulas
 - **Interactive filtering** - Filter by Added/Removed/Modified/Unchanged
 - **Search** - Find specific variables or formulas
 - **Flip direction** - Swap old↔new perspective with one click
-- **Auto-detect folders** - Just drop two project folders next to the script and run
+- **Auto-detect projects** - Just drop two project files/folders next to the script and run
 
 ## Installation
 
@@ -23,16 +24,22 @@ cd DriveWorksDiff
 
 ## Usage
 
-### Option 1: Auto-detect folders
+### Compare .driveprojx files directly
 
-Place your two project folders alongside the package:
+```bash
+python3 -m dw_compare old_project.driveprojx new_project.driveprojx
+```
+
+### Auto-detect projects
+
+Place your two projects (folders or .driveprojx files) alongside the package:
 
 ```
 my-comparison/
 ├── dw_compare/
 ├── run_compare.command
-├── prod/           ← old project
-└── dev/            ← new project
+├── MyProject_v1.driveprojx    ← old project
+└── MyProject_v2.driveprojx    ← new project
 ```
 
 Then run:
@@ -41,15 +48,15 @@ Then run:
 python3 -m dw_compare
 ```
 
-The tool recognizes folder pairs like: `old/new`, `prod/dev`, `v1/v2`, `before/after`, or any two folders.
+The tool recognizes patterns like: `old/new`, `prod/dev`, `v1/v2`, `before/after`, or any two projects.
 
-### Option 2: Specify folders
+### Specify folders
 
 ```bash
-python3 -m dw_compare path/to/old_project path/to/new_project -o report.html
+python3 -m dw_compare path/to/old_folder path/to/new_folder -o report.html
 ```
 
-### Option 3: Double-click (Mac)
+### Double-click (Mac)
 
 After downloading, run once in Terminal:
 ```bash
@@ -61,11 +68,11 @@ Then double-click `run_compare.command` to run.
 ## Command Line Options
 
 ```
-python3 -m dw_compare [old_folder] [new_folder] [options]
+python3 -m dw_compare [old_project] [new_project] [options]
 
 Arguments:
-  old_folder          Path to old project folder (optional if auto-detect works)
-  new_folder          Path to new project folder (optional if auto-detect works)
+  old_project         Path to old project folder or .driveprojx file
+  new_project         Path to new project folder or .driveprojx file
 
 Options:
   -o, --output FILE   Output HTML file (default: dw_comparison.html)
@@ -76,6 +83,7 @@ Options:
 
 The tool parses:
 
+- `.driveprojx` - DriveWorks project files (automatically extracted)
 - `project.xml` - Variables, Calculation Tables, Documents
 - `designMaster.xml` - Constants, Special Variables, Lookup Tables
 - `*.tdm` - Team Design Master exports (attribute-based XML format)
