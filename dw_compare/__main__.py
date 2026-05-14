@@ -3,6 +3,8 @@
 DriveWorks Project Comparison Tool - CLI Entry Point
 """
 
+from __future__ import annotations
+
 import sys
 import argparse
 import webbrowser
@@ -128,8 +130,15 @@ Examples:
                        help='Output HTML file (default: dw_comparison.html)')
     parser.add_argument('--no-open', action='store_true',
                        help='Do not auto-open report in browser')
-    
+    parser.add_argument('--gui', action='store_true',
+                       help='Launch the graphical UI instead of running on the command line')
+
     args = parser.parse_args()
+
+    if args.gui:
+        from .gui import main as gui_main
+        gui_main()
+        return
     
     # Auto-detect projects if not provided
     if args.old_project is None or args.new_project is None:

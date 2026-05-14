@@ -24,6 +24,16 @@ cd DriveWorksDiff
 
 ## Usage
 
+### Graphical UI
+
+Launch a simple file-picker UI (no command line needed):
+
+```bash
+python3 -m dw_compare --gui
+```
+
+On macOS, double-clicking `run_compare.command` opens the GUI.
+
 ### Compare .driveprojx files directly
 
 ```bash
@@ -58,7 +68,7 @@ python3 -m dw_compare path/to/old_folder path/to/new_folder -o report.html
 
 ### Double-click (Mac)
 
-After downloading, run once in Terminal:
+Opens the GUI. After downloading, run once in Terminal:
 ```bash
 chmod +x run_compare.command
 ```
