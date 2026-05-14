@@ -13,8 +13,8 @@ import threading
 import traceback
 import webbrowser
 from pathlib import Path
+import tkinter as tk
 from tkinter import Tk, StringVar, BooleanVar, END, DISABLED, NORMAL, filedialog, messagebox
-from tkinter import ttk
 from tkinter.scrolledtext import ScrolledText
 
 from .parsers import load_project
@@ -62,34 +62,52 @@ class CompareApp:
         self._drain_log()
 
     def _build_ui(self) -> None:
+        # Plain tk widgets (not ttk) because ttk + Tk 8.5 on modern macOS often
+        # renders as an empty / black frame. tk widgets are uglier but draw.
         pad = {'padx': 8, 'pady': 6}
-        frm = ttk.Frame(self.root, padding=12)
+        bg = '#f4f4f4'
+        self.root.configure(bg=bg)
+
+        frm = tk.Frame(self.root, bg=bg, padx=12, pady=12)
         frm.pack(fill='both', expand=True)
 
-        ttk.Label(frm, text='Old project:').grid(row=0, column=0, sticky='w', **pad)
-        ttk.Entry(frm, textvariable=self.old_path).grid(row=0, column=1, sticky='ew', **pad)
-        ttk.Button(frm, text='File…', command=lambda: self._pick_file(self.old_path)).grid(row=0, column=2, **pad)
-        ttk.Button(frm, text='Folder…', command=lambda: self._pick_folder(self.old_path)).grid(row=0, column=3, **pad)
+        def label(text, **kw):
+            return tk.Label(frm, text=text, bg=bg, anchor='w', **kw)
 
-        ttk.Label(frm, text='New project:').grid(row=1, column=0, sticky='w', **pad)
-        ttk.Entry(frm, textvariable=self.new_path).grid(row=1, column=1, sticky='ew', **pad)
-        ttk.Button(frm, text='File…', command=lambda: self._pick_file(self.new_path)).grid(row=1, column=2, **pad)
-        ttk.Button(frm, text='Folder…', command=lambda: self._pick_folder(self.new_path)).grid(row=1, column=3, **pad)
+        def entry(var):
+            return tk.Entry(frm, textvariable=var, highlightthickness=1, relief='solid', bd=1)
 
-        ttk.Label(frm, text='Output HTML:').grid(row=2, column=0, sticky='w', **pad)
-        ttk.Entry(frm, textvariable=self.output_path).grid(row=2, column=1, sticky='ew', **pad)
-        ttk.Button(frm, text='Save as…', command=self._pick_output).grid(row=2, column=2, columnspan=2, sticky='ew', **pad)
+        def button(text, cmd):
+            return tk.Button(frm, text=text, command=cmd, highlightthickness=0)
 
-        ttk.Checkbutton(
+        label('Old project:').grid(row=0, column=0, sticky='w', **pad)
+        entry(self.old_path).grid(row=0, column=1, sticky='ew', **pad)
+        button('File…', lambda: self._pick_file(self.old_path)).grid(row=0, column=2, **pad)
+        button('Folder…', lambda: self._pick_folder(self.old_path)).grid(row=0, column=3, **pad)
+
+        label('New project:').grid(row=1, column=0, sticky='w', **pad)
+        entry(self.new_path).grid(row=1, column=1, sticky='ew', **pad)
+        button('File…', lambda: self._pick_file(self.new_path)).grid(row=1, column=2, **pad)
+        button('Folder…', lambda: self._pick_folder(self.new_path)).grid(row=1, column=3, **pad)
+
+        label('Output HTML:').grid(row=2, column=0, sticky='w', **pad)
+        entry(self.output_path).grid(row=2, column=1, sticky='ew', **pad)
+        button('Save as…', self._pick_output).grid(row=2, column=2, columnspan=2, sticky='ew', **pad)
+
+        tk.Checkbutton(
             frm, text='Open report in browser when done',
-            variable=self.open_in_browser,
+            variable=self.open_in_browser, bg=bg, anchor='w',
+            highlightthickness=0,
         ).grid(row=3, column=1, sticky='w', **pad)
 
-        self.compare_btn = ttk.Button(frm, text='Compare', command=self._on_compare)
+        self.compare_btn = tk.Button(
+            frm, text='Compare', command=self._on_compare,
+            highlightthickness=0, font=('TkDefaultFont', 13, 'bold'),
+        )
         self.compare_btn.grid(row=3, column=2, columnspan=2, sticky='ew', **pad)
 
-        ttk.Label(frm, text='Log:').grid(row=4, column=0, sticky='nw', **pad)
-        self.log_box = ScrolledText(frm, height=14, wrap='word', state=DISABLED)
+        label('Log:').grid(row=4, column=0, sticky='nw', **pad)
+        self.log_box = ScrolledText(frm, height=14, wrap='word', state=DISABLED, bd=1, relief='solid')
         self.log_box.grid(row=4, column=1, columnspan=3, sticky='nsew', **pad)
 
         frm.columnconfigure(1, weight=1)
@@ -213,6 +231,16 @@ class CompareApp:
 def main() -> None:
     root = Tk()
     CompareApp(root)
+    # On macOS a Tk window launched from a Terminal child process opens behind
+    # everything else. Force it to the front, then drop the topmost flag so the
+    # user can still move other windows on top of it normally.
+    root.lift()
+    root.attributes('-topmost', True)
+    root.after(300, lambda: root.attributes('-topmost', False))
+    try:
+        root.focus_force()
+    except Exception:
+        pass
     root.mainloop()
 
 
