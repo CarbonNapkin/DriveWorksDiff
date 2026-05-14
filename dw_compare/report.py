@@ -17,6 +17,7 @@ from .comparers import (
     compare_data_tables,
     compare_nav_steps,
     compare_spec_macros,
+    compare_forms,
 )
 
 
@@ -66,6 +67,10 @@ def generate_html_report(old_proj: DWProject, new_proj: DWProject,
     # --- Navigation Steps Section ---
     nav_html, nav_stats = compare_nav_steps(old_proj.nav_steps, new_proj.nav_steps)
     sections.append(('Navigation Steps', nav_html, nav_stats))
+
+    # --- Forms Section ---
+    form_html, form_stats = compare_forms(old_proj.forms, new_proj.forms)
+    sections.append(('Forms', form_html, form_stats))
     
     # Aggregate summary
     for _, _, stats in sections:

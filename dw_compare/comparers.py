@@ -560,6 +560,146 @@ def _diff_props(old_props: dict, new_props: dict) -> list:
     return out
 
 
+def _fmt_prop(p):
+    """Format a (is_static, value) tuple for display."""
+    if p is None:
+        return ''
+    _is_static, val = p
+    return val or ''
+
+
+def _compare_prop_dicts(old_props: dict, new_props: dict) -> list:
+    """Compare two property dicts whose values are (is_static, formula_or_value)
+    tuples. Returns list of (prop_name, status, old_tuple, new_tuple) for
+    properties whose tuples differ. Empty-vs-empty pairs are skipped, even
+    when is_static differs, to keep the report focused on real changes."""
+    out = []
+    for k in sorted(set(old_props) | set(new_props)):
+        o = old_props.get(k)
+        n = new_props.get(k)
+        if o == n:
+            continue
+        o_val = _fmt_prop(o)
+        n_val = _fmt_prop(n)
+        if not o_val and not n_val:
+            # Both effectively empty (likely a static-flag-only change). Skip
+            # to keep the diff readable on real-world projects.
+            continue
+        if k not in old_props or o_val == '':
+            out.append((k, 'added', o, n))
+        elif k not in new_props or n_val == '':
+            out.append((k, 'removed', o, n))
+        else:
+            out.append((k, 'modified', o, n))
+    return out
+
+
+def _form_change_row(control: str, ctrl_type: str, prop: str, status: str,
+                     old_p, new_p) -> str:
+    badge = f'<span class="badge badge-{status}">{status.title()}</span>'
+    old_v = _fmt_prop(old_p)
+    new_v = _fmt_prop(new_p)
+    if status == 'modified':
+        cell = inline_diff(old_v, new_v)
+    else:
+        cell = escape(new_v or old_v)
+    # Note static-flag changes inline if the formula/value did not change but
+    # static did. (Won't reach here because _compare_prop_dicts filters.)
+    return (
+        f'<tr class="{status}">'
+        f'<td>{escape(control)}</td>'
+        f'<td>{escape(ctrl_type)}</td>'
+        f'<td>{escape(prop)}</td>'
+        f'<td>{badge}</td>'
+        f'<td class="formula">{cell}</td>'
+        '</tr>'
+    )
+
+
+def compare_forms(old: dict, new: dict) -> tuple[str, dict]:
+    """Compare Forms and their controls. Each modified form gets a table of
+    property-level change rows covering both form-level rules and per-control
+    properties."""
+    added, removed, common = compare_dicts(old, new)
+    stats = {'added': len(added), 'removed': len(removed), 'modified': 0, 'unchanged': 0}
+    html_parts = []
+
+    for name in sorted(added):
+        f = new[name]
+        html_parts.append(
+            f'<h3 class="added">➕ {escape(name)} <span class="badge badge-added">Added</span> '
+            f'<small>({len(f.controls)} controls)</small></h3>'
+        )
+
+    for name in sorted(removed):
+        f = old[name]
+        html_parts.append(
+            f'<h3 class="removed">➖ {escape(name)} <span class="badge badge-removed">Removed</span> '
+            f'<small>({len(f.controls)} controls)</small></h3>'
+        )
+
+    for name in sorted(common):
+        of, nf = old[name], new[name]
+        change_rows = []
+
+        # Form-level property changes
+        for prop, status, op, np in _compare_prop_dicts(of.form_props, nf.form_props):
+            change_rows.append(_form_change_row('(form)', '', prop, status, op, np))
+
+        c_added, c_removed, c_common = compare_dicts(of.controls, nf.controls)
+
+        for ctrl_name in sorted(c_added):
+            c = nf.controls[ctrl_name]
+            badge = '<span class="badge badge-added">Added</span>'
+            change_rows.append(
+                f'<tr class="added"><td>{escape(ctrl_name)}</td>'
+                f'<td>{escape(c.control_type)}</td>'
+                f'<td colspan="2">{badge}</td>'
+                f'<td>{len(c.props)} properties</td></tr>'
+            )
+
+        for ctrl_name in sorted(c_removed):
+            c = of.controls[ctrl_name]
+            badge = '<span class="badge badge-removed">Removed</span>'
+            change_rows.append(
+                f'<tr class="removed"><td>{escape(ctrl_name)}</td>'
+                f'<td>{escape(c.control_type)}</td>'
+                f'<td colspan="2">{badge}</td>'
+                f'<td>{len(c.props)} properties</td></tr>'
+            )
+
+        for ctrl_name in sorted(c_common):
+            o_ctrl = of.controls[ctrl_name]
+            n_ctrl = nf.controls[ctrl_name]
+            if o_ctrl.control_type != n_ctrl.control_type:
+                # Type swap is a structural change worth its own row.
+                badge = '<span class="badge badge-modified">Type changed</span>'
+                change_rows.append(
+                    f'<tr class="modified"><td>{escape(ctrl_name)}</td>'
+                    f'<td class="formula">{inline_diff(o_ctrl.control_type, n_ctrl.control_type)}</td>'
+                    f'<td colspan="2">{badge}</td>'
+                    f'<td>control type</td></tr>'
+                )
+            for prop, status, op, np in _compare_prop_dicts(o_ctrl.props, n_ctrl.props):
+                change_rows.append(
+                    _form_change_row(ctrl_name, n_ctrl.control_type, prop, status, op, np)
+                )
+
+        if change_rows:
+            stats['modified'] += 1
+            html_parts.append(
+                f'<h3 class="modified">📝 {escape(name)} <span class="badge badge-modified">Modified</span></h3>'
+                '<table><thead><tr><th>Control</th><th>Type</th><th>Property</th>'
+                '<th>Status</th><th>Formula / Value</th></tr></thead>'
+                f'<tbody>{"".join(change_rows)}</tbody></table>'
+            )
+        else:
+            stats['unchanged'] += 1
+
+    body = ''.join(html_parts) if html_parts else '<p class="empty">No forms found</p>'
+    return body, stats
+
+
 def _macro_task_rows(task_key: str, status: str, old_task, new_task, prop_changes=None) -> str:
     """Render one or more <tr> rows for a single macro task."""
     badge = f'<span class="badge badge-{status}">{status.title()}</span>'

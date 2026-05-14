@@ -6,7 +6,7 @@ A command-line tool to compare two versions of a DriveWorks project and generate
 
 - **Direct .driveprojx support** - Pass project files directly, no manual extraction needed
 - **Recursive scanning** - Finds all DriveWorks XML files in nested folders
-- **Compares everything** - Variables, Constants, Special Variables, Calculation Tables, Component Tasks, Documents, Lookup Tables
+- **Compares everything** - Variables (with resolved category names), Constants, Special Variables, Calculation Tables (including row-level rules), Component Tasks, Documents, Lookup Tables, Data Tables, Specification Macros (per-task and per-property), Navigation Steps, and Forms (form-level rules plus per-control property formulas)
 - **Inline diffs** - See exactly what changed in formulas
 - **Interactive filtering** - Filter by Added/Removed/Modified/Unchanged
 - **Search** - Find specific variables or formulas

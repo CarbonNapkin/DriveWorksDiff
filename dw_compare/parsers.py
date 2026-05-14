@@ -8,6 +8,7 @@ from pathlib import Path
 from .models import (
     Variable, Constant, CalcTable, ComponentTask, DWProject,
     SpecMacro, SpecMacroTask, NavStep, DataTableDef,
+    Form, FormControl,
 )
 
 
@@ -20,6 +21,34 @@ NS = {
 }
 
 
+def _local_name(el: ET.Element) -> str:
+    """Tag with any XML namespace stripped."""
+    return el.tag.rsplit('}', 1)[-1]
+
+
+def _read_form_property(el: ET.Element) -> tuple:
+    """Each Form/Control property element looks like
+        <Foo IsStatic="True"><Value>X</Value></Foo>
+    or
+        <Foo IsStatic="False"><Rule>=formula</Rule></Foo>
+    or
+        <Foo IsStatic="False"><Value>resolved-value</Value></Foo>
+    Returns (is_static, formula_or_value). <Rule> wins over <Value> when both
+    are present.
+    """
+    is_static = (el.get('IsStatic', 'True').lower() != 'false')
+    rule = None
+    value = ''
+    for child in el:
+        ln = _local_name(child)
+        if ln == 'Rule':
+            rule = (child.text or '').strip()
+            break
+        if ln == 'Value':
+            value = (child.text or '').strip()
+    return is_static, (rule if rule is not None else value)
+
+
 def _strip_assembly(type_str: str) -> str:
     """Strip the .NET assembly qualifier from a type string like
     'DriveWorks.Email, DriveWorks.Engine' -> 'DriveWorks.Email', and then
@@ -29,9 +58,35 @@ def _strip_assembly(type_str: str) -> str:
     return type_only.rsplit('.', 1)[-1] if type_only else ''
 
 
+def _parse_form(form_el: ET.Element) -> Form:
+    """Build a Form from a <Form Name="..."> element. Form-level rule props
+    are direct children, while <Controls> wraps individual controls (one
+    element per control, tag name = control type, e.g. ComboBox)."""
+    name = form_el.get('Name', '')
+    form_props = {}
+    controls = {}
+    for child in form_el:
+        ln = _local_name(child)
+        if ln == 'Controls':
+            for ctrl_el in child:
+                ctrl_name = ctrl_el.get('Name', '')
+                if not ctrl_name:
+                    continue
+                ctrl_type = _local_name(ctrl_el)
+                props = {}
+                for prop_el in ctrl_el:
+                    props[_local_name(prop_el)] = _read_form_property(prop_el)
+                controls[ctrl_name] = FormControl(
+                    name=ctrl_name, control_type=ctrl_type, props=props
+                )
+        else:
+            form_props[ln] = _read_form_property(child)
+    return Form(name=name, form_props=form_props, controls=controls)
+
+
 def parse_project_xml(path: Path) -> dict:
     """Parse project.xml for variables, calc tables, documents, data tables,
-    specification macros, and variable categories."""
+    specification macros, variable categories, and forms."""
     data = {
         'variables': {},
         'calc_tables': {},
@@ -39,6 +94,7 @@ def parse_project_xml(path: Path) -> dict:
         'data_tables': {},
         'spec_macros': {},
         'categories': {},
+        'forms': {},
     }
 
     try:
@@ -179,6 +235,19 @@ def parse_project_xml(path: Path) -> dict:
                 tasks.append(task)
         data['spec_macros'][macro_name] = SpecMacro(name=macro_name, tasks=tasks)
 
+    # Parse Forms. The <Forms> container lives in the project namespace, but
+    # each <Form> element and its descendants live in
+    # "pa-namespace:DriveWorks.Forms,DriveWorks.Engine". Match by local name
+    # to avoid having to register that unusual namespace URI.
+    forms_container = root.find('project:Forms', NS)
+    if forms_container is not None:
+        for form_el in forms_container:
+            if _local_name(form_el) != 'Form':
+                continue
+            form = _parse_form(form_el)
+            if form.name:
+                data['forms'][form.name] = form
+
     return data
 
 
@@ -258,11 +327,6 @@ def parse_design_master(path: Path) -> dict:
     return data
 
 
-def _local_name(el: ET.Element) -> str:
-    """Return element tag with any XML namespace stripped."""
-    return el.tag.rsplit('}', 1)[-1]
-
-
 def parse_component_tasks(path: Path) -> dict:
     """Parse componentTasks.xml"""
     tasks = {}
@@ -322,6 +386,7 @@ def load_project(folder: Path) -> DWProject:
         proj.data_tables.update(data.get('data_tables', {}))
         proj.spec_macros.update(data.get('spec_macros', {}))
         proj.categories.update(data.get('categories', {}))
+        proj.forms.update(data.get('forms', {}))
 
     # Recursively find all designMaster.xml files
     for dm_file in folder.rglob('designMaster.xml'):

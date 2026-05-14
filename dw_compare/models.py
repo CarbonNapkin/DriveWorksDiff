@@ -78,6 +78,23 @@ class DataTableDef:
 
 
 @dataclass
+class FormControl:
+    name: str
+    control_type: str = ""
+    # property name -> (is_static, formula_or_value)
+    props: dict = field(default_factory=dict)
+
+
+@dataclass
+class Form:
+    name: str
+    # form-level rule-bearing properties (same shape as control props)
+    form_props: dict = field(default_factory=dict)
+    # control name -> FormControl
+    controls: dict = field(default_factory=dict)
+
+
+@dataclass
 class DWProject:
     """Holds all parsed DriveWorks project data"""
     name: str = ""
@@ -91,5 +108,6 @@ class DWProject:
     spec_macros: dict = field(default_factory=dict)
     nav_steps: dict = field(default_factory=dict)
     data_tables: dict = field(default_factory=dict)
+    forms: dict = field(default_factory=dict)
     # GUID -> human-readable name, used to resolve Variable.category
     categories: dict = field(default_factory=dict)
