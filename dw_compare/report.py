@@ -361,24 +361,26 @@ def generate_html_report(old_proj: DWProject, new_proj: DWProject,
                 row.style.display = (statusMatch && searchMatch) ? '' : 'none';
             });
             
-            // Also filter h3 headers (for calc tables, etc.)
-            if (searchText) {
-                document.querySelectorAll('.section-content h3').forEach(h3 => {
-                    const headerText = h3.textContent.toLowerCase();
-                    const table = h3.nextElementSibling;
-                    if (headerText.includes(searchText)) {
-                        h3.style.display = '';
-                        if (table && table.tagName === 'TABLE') table.style.display = '';
-                    } else {
-                        h3.style.display = 'none';
-                        if (table && table.tagName === 'TABLE') table.style.display = 'none';
-                    }
-                });
-            } else {
-                document.querySelectorAll('.section-content h3, .section-content table').forEach(el => {
-                    el.style.display = '';
-                });
-            }
+            // Also filter h3 headers (added/removed/modified calc tables have no row body)
+            document.querySelectorAll('.section-content h3').forEach(h3 => {
+                let headerStatus = null;
+                if (h3.classList.contains('added')) headerStatus = 'added';
+                else if (h3.classList.contains('removed')) headerStatus = 'removed';
+                else if (h3.classList.contains('modified')) headerStatus = 'modified';
+
+                let statusMatch = true;
+                if (headerStatus === 'added') statusMatch = showAdded;
+                else if (headerStatus === 'removed') statusMatch = showRemoved;
+                else if (headerStatus === 'modified') statusMatch = showModified;
+
+                const headerText = h3.textContent.toLowerCase();
+                const searchMatch = !searchText || headerText.includes(searchText);
+                const show = statusMatch && searchMatch;
+
+                h3.style.display = show ? '' : 'none';
+                const table = h3.nextElementSibling;
+                if (table && table.tagName === 'TABLE') table.style.display = show ? '' : 'none';
+            });
         }
         filterRows();
     </script>

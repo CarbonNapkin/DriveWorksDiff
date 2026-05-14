@@ -62,7 +62,10 @@ def parse_project_xml(path: Path) -> dict:
     # Parse Calculation Tables
     for table in root.findall('.//project:CalculationTable', NS):
         tbl_name = table.get('Name', '')
-        row_count = int(table.get('RowCount', 0))
+        try:
+            row_count = int(table.get('RowCount') or 0)
+        except (TypeError, ValueError):
+            row_count = 0
         
         columns = {}
         for col in table.findall('project:Columns/project:Column', NS):
@@ -160,37 +163,55 @@ def parse_design_master(path: Path) -> dict:
     return data
 
 
+def _local_name(el: ET.Element) -> str:
+    """Return element tag with any XML namespace stripped."""
+    return el.tag.rsplit('}', 1)[-1]
+
+
 def parse_component_tasks(path: Path) -> dict:
     """Parse componentTasks.xml"""
     tasks = {}
-    
+
     try:
         tree = ET.parse(path)
         root = tree.getroot()
     except Exception as e:
         print(f"Warning: Could not parse {path}: {e}")
         return tasks
-    
+
     for task in root.findall('.//comp-task:Task', NS):
         task_id = task.get('Id', '')
         name = task.get('Name', '')
-        task_type = task.get('Type', '').split('.')[-1].replace(', DriveWorks.SolidWorks', '')
+        # .NET assembly-qualified type names look like "Ns.Sub.TypeName, AssemblyName".
+        # Drop the assembly qualifier first, then take the final type name segment.
+        raw_type = task.get('Type', '')
+        type_only = raw_type.split(',', 1)[0].strip()
+        task_type = type_only.rsplit('.', 1)[-1] if type_only else ''
         comp_id = task.get('ComponentId', '')
         scope = task.get('Scope', '')
-        
+
+        # Rules may live under any namespace inside the task — match by local name.
         rules = {}
-        for rule in task.findall('.//Rule'):
+        for rule in task.iter():
+            if _local_name(rule) != 'Rule':
+                continue
             rule_name = rule.get('Name', '')
-            formula_el = rule.find('Formula')
-            if rule_name and formula_el is not None:
-                rules[rule_name] = (formula_el.text or '').strip()
-        
+            if not rule_name:
+                continue
+            formula_text = None
+            for child in rule:
+                if _local_name(child) == 'Formula':
+                    formula_text = (child.text or '').strip()
+                    break
+            if formula_text is not None:
+                rules[rule_name] = formula_text
+
         key = f"{name}|{comp_id or scope or task_id}"
         tasks[key] = ComponentTask(
             id=task_id, name=name, task_type=task_type,
             component_id=comp_id, scope=scope, rules=rules
         )
-    
+
     return tasks
 
 

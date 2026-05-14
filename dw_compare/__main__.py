@@ -54,12 +54,21 @@ def resolve_input(path: Path) -> Path:
         return path  # Let validation catch invalid paths
 
 
+EXCLUDED_DIRS = {
+    'dw_compare', '__pycache__', 'node_modules',
+    'dist', 'build', 'venv', '.venv', 'env',
+}
+
+
 def find_project_folders() -> tuple[Path, Path] | None:
     """Auto-detect two project folders or .driveprojx files in current directory"""
     cwd = Path.cwd()
-    
-    # Get all subdirectories (excluding hidden)
-    subdirs = sorted([d for d in cwd.iterdir() if d.is_dir() and not d.name.startswith('.')])
+
+    # Get all subdirectories (excluding hidden, the package itself, and common build dirs)
+    subdirs = sorted(
+        d for d in cwd.iterdir()
+        if d.is_dir() and not d.name.startswith('.') and d.name not in EXCLUDED_DIRS
+    )
     
     # Get all .driveprojx files
     projx_files = sorted(cwd.glob('*.driveprojx'))

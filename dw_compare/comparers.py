@@ -165,52 +165,82 @@ def compare_special_vars(old: dict, new: dict) -> tuple[str, dict]:
     return html, stats
 
 
+def _calc_row(col: str, scope: str, status: str, old_val: str, new_val: str) -> str:
+    badge = f'<span class="badge badge-{status}">{status.title()}</span>'
+    if status == 'modified':
+        diff = inline_diff(old_val, new_val)
+    else:
+        diff = escape(new_val or old_val)
+    return (
+        f'<tr class="{status}"><td>{escape(col)}</td><td>{escape(scope)}</td>'
+        f'<td>{badge}</td><td class="formula">{diff}</td></tr>'
+    )
+
+
 def compare_calc_tables(old: dict, new: dict) -> tuple[str, dict]:
     """Compare calculation tables"""
     added, removed, common = compare_dicts(old, new)
     stats = {'added': len(added), 'removed': len(removed), 'modified': 0, 'unchanged': 0}
-    
+
     html_parts = []
-    
+
     for name in sorted(added):
-        html_parts.append(f'<h3 class="added">➕ {escape(name)} <span class="badge badge-added">Added</span></h3>')
-    
+        html_parts.append(
+            f'<h3 class="added">➕ {escape(name)} <span class="badge badge-added">Added</span></h3>'
+        )
+
     for name in sorted(removed):
-        html_parts.append(f'<h3 class="removed">➖ {escape(name)} <span class="badge badge-removed">Removed</span></h3>')
-    
+        html_parts.append(
+            f'<h3 class="removed">➖ {escape(name)} <span class="badge badge-removed">Removed</span></h3>'
+        )
+
     for name in sorted(common):
         old_tbl, new_tbl = old[name], new[name]
-        
-        # Compare columns
-        col_changes = []
+        rows_html = []
         all_cols = set(old_tbl.columns.keys()) | set(new_tbl.columns.keys())
-        
+
         for col in sorted(all_cols):
             old_col = old_tbl.columns.get(col, {'common': '', 'rows': {}})
             new_col = new_tbl.columns.get(col, {'common': '', 'rows': {}})
-            
+
             if col not in old_tbl.columns:
-                col_changes.append((col, 'added', '', new_col['common']))
-            elif col not in new_tbl.columns:
-                col_changes.append((col, 'removed', old_col['common'], ''))
-            elif old_col['common'] != new_col['common'] or old_col['rows'] != new_col['rows']:
-                col_changes.append((col, 'modified', old_col['common'], new_col['common']))
-        
-        if col_changes:
+                rows_html.append(_calc_row(col, 'Common', 'added', '', new_col['common']))
+                for idx in sorted(new_col['rows']):
+                    rows_html.append(_calc_row(col, f'Row {idx}', 'added', '', new_col['rows'][idx]))
+                continue
+
+            if col not in new_tbl.columns:
+                rows_html.append(_calc_row(col, 'Common', 'removed', old_col['common'], ''))
+                for idx in sorted(old_col['rows']):
+                    rows_html.append(_calc_row(col, f'Row {idx}', 'removed', old_col['rows'][idx], ''))
+                continue
+
+            if old_col['common'] != new_col['common']:
+                rows_html.append(_calc_row(col, 'Common', 'modified', old_col['common'], new_col['common']))
+
+            row_indices = set(old_col['rows']) | set(new_col['rows'])
+            for idx in sorted(row_indices):
+                o = old_col['rows'].get(idx, '')
+                n = new_col['rows'].get(idx, '')
+                if o == n:
+                    continue
+                if not o:
+                    rows_html.append(_calc_row(col, f'Row {idx}', 'added', '', n))
+                elif not n:
+                    rows_html.append(_calc_row(col, f'Row {idx}', 'removed', o, ''))
+                else:
+                    rows_html.append(_calc_row(col, f'Row {idx}', 'modified', o, n))
+
+        if rows_html:
             stats['modified'] += 1
-            rows_html = []
-            for col, status, old_val, new_val in col_changes:
-                css = status
-                badge = f'<span class="badge badge-{status}">{status.title()}</span>'
-                diff = inline_diff(old_val, new_val) if status == 'modified' else escape(new_val or old_val)
-                rows_html.append(f'<tr class="{css}"><td>{escape(col)}</td><td>{badge}</td><td class="formula">{diff}</td></tr>')
-            
-            html_parts.append(f'''<h3>📊 {escape(name)} <span class="badge badge-modified">Modified</span></h3>
-            <table><thead><tr><th>Column</th><th>Status</th><th>Common Rule</th></tr></thead>
-            <tbody>{"".join(rows_html)}</tbody></table>''')
+            html_parts.append(
+                f'<h3 class="modified">📊 {escape(name)} <span class="badge badge-modified">Modified</span></h3>'
+                f'<table><thead><tr><th>Column</th><th>Scope</th><th>Status</th><th>Formula</th></tr></thead>'
+                f'<tbody>{"".join(rows_html)}</tbody></table>'
+            )
         else:
             stats['unchanged'] += 1
-    
+
     return ''.join(html_parts) if html_parts else '<p class="empty">No calculation tables found</p>', stats
 
 
