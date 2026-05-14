@@ -354,5 +354,236 @@ def compare_lookup_tables(old: dict, new: dict) -> tuple[str, dict]:
         <thead><tr><th>Table Name</th><th>Status</th><th>Size</th></tr></thead>
         <tbody>{"".join(rows) if rows else '<tr><td colspan="3" class="empty">No lookup tables found</td></tr>'}</tbody>
     </table>'''
-    
+
     return html, stats
+
+
+def compare_data_tables(old: dict, new: dict) -> tuple[str, dict]:
+    """Compare data table definitions (name + type, row data lives elsewhere)."""
+    added, removed, common = compare_dicts(old, new)
+    stats = {'added': len(added), 'removed': len(removed), 'modified': 0, 'unchanged': 0}
+    rows = []
+
+    for name in sorted(added):
+        d = new[name]
+        rows.append(
+            f'<tr class="added"><td>{escape(name)}</td>'
+            f'<td><span class="badge badge-added">Added</span></td>'
+            f'<td>{escape(d.table_type)}</td></tr>'
+        )
+
+    for name in sorted(removed):
+        d = old[name]
+        rows.append(
+            f'<tr class="removed"><td>{escape(name)}</td>'
+            f'<td><span class="badge badge-removed">Removed</span></td>'
+            f'<td>{escape(d.table_type)}</td></tr>'
+        )
+
+    for name in sorted(common):
+        old_d, new_d = old[name], new[name]
+        if old_d.table_type != new_d.table_type:
+            stats['modified'] += 1
+            rows.append(
+                f'<tr class="modified"><td>{escape(name)}</td>'
+                f'<td><span class="badge badge-modified">Modified</span></td>'
+                f'<td class="formula">{inline_diff(old_d.table_type, new_d.table_type)}</td></tr>'
+            )
+        else:
+            stats['unchanged'] += 1
+            rows.append(
+                f'<tr class="unchanged"><td>{escape(name)}</td><td>—</td>'
+                f'<td>{escape(new_d.table_type)}</td></tr>'
+            )
+
+    body = ''.join(rows) if rows else '<tr><td colspan="3" class="empty">No data tables found</td></tr>'
+    html = (
+        '<table><thead><tr><th>Data Table</th><th>Status</th><th>Type</th></tr></thead>'
+        f'<tbody>{body}</tbody></table>'
+    )
+    return html, stats
+
+
+def compare_nav_steps(old: dict, new: dict) -> tuple[str, dict]:
+    """Compare navigation steps (the form flow graph)."""
+    added, removed, common = compare_dicts(old, new)
+    stats = {'added': len(added), 'removed': len(removed), 'modified': 0, 'unchanged': 0}
+    rows = []
+
+    def fmt_target(s):
+        # Highlight the resolved Next/Previous wiring as a compact string.
+        bits = []
+        if s.next_step_value:
+            bits.append(f'next={s.next_step_value}')
+        if s.next_step_rule and s.next_step_rule != f'"{s.next_step_value}"':
+            bits.append(f'nextRule={s.next_step_rule}')
+        if s.next_macro_value:
+            bits.append(f'nextMacro={s.next_macro_value}')
+        if s.previous_macro_value:
+            bits.append(f'prevMacro={s.previous_macro_value}')
+        return ', '.join(bits)
+
+    for name in sorted(added):
+        s = new[name]
+        rows.append(
+            f'<tr class="added"><td>{escape(name)}</td><td>{escape(s.step_type)}</td>'
+            f'<td><span class="badge badge-added">Added</span></td>'
+            f'<td class="formula">{escape(fmt_target(s))}</td></tr>'
+        )
+
+    for name in sorted(removed):
+        s = old[name]
+        rows.append(
+            f'<tr class="removed"><td>{escape(name)}</td><td>{escape(s.step_type)}</td>'
+            f'<td><span class="badge badge-removed">Removed</span></td>'
+            f'<td class="formula">{escape(fmt_target(s))}</td></tr>'
+        )
+
+    for name in sorted(common):
+        o, n = old[name], new[name]
+        if o != n:
+            stats['modified'] += 1
+            diff = inline_diff(fmt_target(o), fmt_target(n))
+            type_cell = escape(n.step_type) if o.step_type == n.step_type else inline_diff(o.step_type, n.step_type)
+            rows.append(
+                f'<tr class="modified"><td>{escape(name)}</td><td>{type_cell}</td>'
+                f'<td><span class="badge badge-modified">Modified</span></td>'
+                f'<td class="formula">{diff}</td></tr>'
+            )
+        else:
+            stats['unchanged'] += 1
+            rows.append(
+                f'<tr class="unchanged"><td>{escape(name)}</td><td>{escape(n.step_type)}</td>'
+                f'<td>—</td><td class="formula">{escape(fmt_target(n))}</td></tr>'
+            )
+
+    body = ''.join(rows) if rows else '<tr><td colspan="4" class="empty">No navigation steps found</td></tr>'
+    html = (
+        '<table><thead><tr><th>Step</th><th>Type</th><th>Status</th><th>Wiring</th></tr></thead>'
+        f'<tbody>{body}</tbody></table>'
+    )
+    return html, stats
+
+
+def compare_spec_macros(old: dict, new: dict) -> tuple[str, dict]:
+    """Compare Specification Macros at the macro level, with task-level
+    add/remove/modify rows under each modified macro."""
+    added, removed, common = compare_dicts(old, new)
+    stats = {'added': len(added), 'removed': len(removed), 'modified': 0, 'unchanged': 0}
+    html_parts = []
+
+    def task_label(t):
+        return f'{t.title or "(untitled)"} [{t.task_type or "?"}]'
+
+    for name in sorted(added):
+        m = new[name]
+        html_parts.append(
+            f'<h3 class="added">➕ {escape(name)} <span class="badge badge-added">Added</span> '
+            f'<small>({len(m.tasks)} tasks)</small></h3>'
+        )
+
+    for name in sorted(removed):
+        m = old[name]
+        html_parts.append(
+            f'<h3 class="removed">➖ {escape(name)} <span class="badge badge-removed">Removed</span> '
+            f'<small>({len(m.tasks)} tasks)</small></h3>'
+        )
+
+    for name in sorted(common):
+        o, n = old[name], new[name]
+        # Task identity is title + task_type. Position matters too (order),
+        # but we surface order by listing tasks in source order with positions.
+        old_keys = [task_label(t) for t in o.tasks]
+        new_keys = [task_label(t) for t in n.tasks]
+
+        old_by_key = {k: t for k, t in zip(old_keys, o.tasks)}
+        new_by_key = {k: t for k, t in zip(new_keys, n.tasks)}
+
+        all_keys = list(dict.fromkeys(old_keys + new_keys))  # preserve first-seen order
+        row_html = []
+        macro_modified = False
+
+        for key in all_keys:
+            ot = old_by_key.get(key)
+            nt = new_by_key.get(key)
+            if ot is None:
+                macro_modified = True
+                row_html.append(_macro_task_rows(key, 'added', None, nt))
+            elif nt is None:
+                macro_modified = True
+                row_html.append(_macro_task_rows(key, 'removed', ot, None))
+            else:
+                prop_changes = _diff_props(ot.properties, nt.properties)
+                if prop_changes:
+                    macro_modified = True
+                    row_html.append(_macro_task_rows(key, 'modified', ot, nt, prop_changes))
+
+        if old_keys != new_keys and not macro_modified:
+            # Task set identical but reordered.
+            macro_modified = True
+            row_html.append(
+                '<tr class="modified"><td colspan="3"><em>Tasks reordered</em></td>'
+                f'<td class="formula">old order: {escape(", ".join(old_keys))}<br>'
+                f'new order: {escape(", ".join(new_keys))}</td></tr>'
+            )
+
+        if macro_modified:
+            stats['modified'] += 1
+            html_parts.append(
+                f'<h3 class="modified">⚙️ {escape(name)} <span class="badge badge-modified">Modified</span></h3>'
+                '<table><thead><tr><th>Task</th><th>Status</th><th>Property</th><th>Formula</th></tr></thead>'
+                f'<tbody>{"".join(row_html)}</tbody></table>'
+            )
+        else:
+            stats['unchanged'] += 1
+
+    body = ''.join(html_parts) if html_parts else '<p class="empty">No specification macros found</p>'
+    return body, stats
+
+
+def _diff_props(old_props: dict, new_props: dict) -> list:
+    """Return list of (prop_name, status, old_val, new_val) tuples for prop
+    keys that differ between the two property dicts."""
+    out = []
+    all_keys = sorted(set(old_props) | set(new_props))
+    for k in all_keys:
+        o = old_props.get(k, '')
+        n = new_props.get(k, '')
+        if o == n:
+            continue
+        if k not in old_props:
+            out.append((k, 'added', '', n))
+        elif k not in new_props:
+            out.append((k, 'removed', o, ''))
+        else:
+            out.append((k, 'modified', o, n))
+    return out
+
+
+def _macro_task_rows(task_key: str, status: str, old_task, new_task, prop_changes=None) -> str:
+    """Render one or more <tr> rows for a single macro task."""
+    badge = f'<span class="badge badge-{status}">{status.title()}</span>'
+    if status == 'added' or status == 'removed':
+        t = new_task if status == 'added' else old_task
+        n_props = len(t.properties)
+        return (
+            f'<tr class="{status}"><td>{escape(task_key)}</td><td>{badge}</td>'
+            f'<td colspan="2">{n_props} properties</td></tr>'
+        )
+    # Modified case, emit one row per changed property
+    rows = []
+    first = True
+    for prop_name, p_status, old_val, new_val in prop_changes or []:
+        p_badge = f'<span class="badge badge-{p_status}">{p_status.title()}</span>'
+        if p_status == 'modified':
+            cell = inline_diff(old_val, new_val)
+        else:
+            cell = escape(new_val or old_val)
+        task_cell = escape(task_key) if first else ''
+        status_cell = badge if first else ''
+        rows.append(
+            f'<tr class="{p_status}"><td>{task_cell}</td><td>{status_cell}</td>'
+            f'<td>{escape(prop_name)} {p_badge}</td><td class="formula">{cell}</td></tr>'
+        )
+        first = False
+    return ''.join(rows)

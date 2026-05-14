@@ -5,7 +5,10 @@ XML parsers for DriveWorks project files.
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from .models import Variable, Constant, CalcTable, ComponentTask, DWProject
+from .models import (
+    Variable, Constant, CalcTable, ComponentTask, DWProject,
+    SpecMacro, SpecMacroTask, NavStep, DataTableDef,
+)
 
 
 # Namespace mappings for DriveWorks XML
@@ -17,10 +20,27 @@ NS = {
 }
 
 
+def _strip_assembly(type_str: str) -> str:
+    """Strip the .NET assembly qualifier from a type string like
+    'DriveWorks.Email, DriveWorks.Engine' -> 'DriveWorks.Email', and then
+    return the final type segment ('Email'). Empty input -> empty string.
+    """
+    type_only = (type_str or '').split(',', 1)[0].strip()
+    return type_only.rsplit('.', 1)[-1] if type_only else ''
+
+
 def parse_project_xml(path: Path) -> dict:
-    """Parse project.xml for variables, calc tables, documents"""
-    data = {'variables': {}, 'calc_tables': {}, 'documents': {}}
-    
+    """Parse project.xml for variables, calc tables, documents, data tables,
+    specification macros, and variable categories."""
+    data = {
+        'variables': {},
+        'calc_tables': {},
+        'documents': {},
+        'data_tables': {},
+        'spec_macros': {},
+        'categories': {},
+    }
+
     try:
         tree = ET.parse(path)
         root = tree.getroot()
@@ -92,25 +112,86 @@ def parse_project_xml(path: Path) -> dict:
     # Parse Documents (Triggered Actions, etc.)
     for doc in root.findall('.//project:Document', NS):
         doc_name = doc.get('Name', '')
-        doc_type = doc.get('Type', '')
+        doc_type = _strip_assembly(doc.get('Type', ''))
         rules = {}
-        
+
         for rule in doc.findall('.//project:Rule', NS):
             rule_id = rule.get('Id', '')
             formula_el = rule.find('project:Formula', NS)
             if rule_id and formula_el is not None:
                 rules[rule_id] = (formula_el.text or '').strip()
-        
+
         if doc_name:
             data['documents'][doc_name] = {'type': doc_type, 'rules': rules}
-    
+
+    # Parse Variable Categories (GUID -> human name)
+    for cat in root.findall('.//project:Category', NS):
+        cat_id = cat.get('UniqueId', '')
+        cat_name = cat.get('Name', '')
+        if cat_id and cat_name:
+            data['categories'][cat_id] = cat_name
+
+    # Parse Data Tables (name + type, the row data lives in CSV elsewhere)
+    for dt in root.findall('.//project:DataTable', NS):
+        dt_name = dt.get('Name', '')
+        dt_type = _strip_assembly(dt.get('Type', ''))
+        if dt_name:
+            data['data_tables'][dt_name] = DataTableDef(name=dt_name, table_type=dt_type)
+
+    # Parse Specification Macros. Inner elements live under several namespaces
+    # (specification-flow, event-flow, etc.) so match by local name throughout.
+    for macro in root.findall('.//project:SpecificationMacro', NS):
+        macro_name = macro.get('Name', '')
+        if not macro_name:
+            continue
+        tasks = []
+        for tasks_block in macro:
+            if _local_name(tasks_block) != 'Tasks':
+                continue
+            for task_el in tasks_block:
+                if _local_name(task_el) != 'Task':
+                    continue
+                task = SpecMacroTask(
+                    title=task_el.get('Title', ''),
+                    task_type=_strip_assembly(task_el.get('Type', '')),
+                )
+                # Pull each Property -> Binding -> Formula formula into a dict.
+                for child in task_el:
+                    if _local_name(child) != 'Properties':
+                        continue
+                    for prop in child:
+                        if _local_name(prop) != 'Property':
+                            continue
+                        prop_name = prop.get('Name', '')
+                        if not prop_name:
+                            continue
+                        formula_text = ''
+                        for binding in prop:
+                            if _local_name(binding) != 'Binding':
+                                continue
+                            for ff in binding:
+                                if _local_name(ff) == 'Formula' and ff.text:
+                                    formula_text = ff.text.strip()
+                                    break
+                            if formula_text:
+                                break
+                        task.properties[prop_name] = formula_text
+                tasks.append(task)
+        data['spec_macros'][macro_name] = SpecMacro(name=macro_name, tasks=tasks)
+
     return data
 
 
 def parse_design_master(path: Path) -> dict:
-    """Parse designMaster.xml (or TDM format) for constants, special vars, lookup tables, and variables"""
-    data = {'constants': {}, 'special_vars': {}, 'lookup_tables': {}, 'variables': {}}
-    
+    """Parse designMaster.xml (or TDM format) for constants, special vars, lookup tables, variables, and navigation steps."""
+    data = {
+        'constants': {},
+        'special_vars': {},
+        'lookup_tables': {},
+        'variables': {},
+        'nav_steps': {},
+    }
+
     try:
         tree = ET.parse(path)
         root = tree.getroot()
@@ -159,7 +240,21 @@ def parse_design_master(path: Path) -> dict:
         content = table.text or ''
         if name:
             data['lookup_tables'][name] = content.strip()
-    
+
+    # Parse Navigation Steps (attribute-only elements inside <Navigation>)
+    for step in root.findall('.//Navigation/Step'):
+        step_name = step.get('Name', '')
+        if not step_name:
+            continue
+        data['nav_steps'][step_name] = NavStep(
+            name=step_name,
+            step_type=step.get('Type', ''),
+            next_step_rule=step.get('NextStepRule', ''),
+            next_step_value=step.get('NextStepValue', ''),
+            next_macro_value=step.get('NextMacroValue', ''),
+            previous_macro_value=step.get('PreviousMacroValue', ''),
+        )
+
     return data
 
 
@@ -179,14 +274,12 @@ def parse_component_tasks(path: Path) -> dict:
         print(f"Warning: Could not parse {path}: {e}")
         return tasks
 
+    # .//comp-task:Task picks up Tasks under both <ComponentSpecific> and
+    # <TypeSpecific> wrappers because the search is recursive.
     for task in root.findall('.//comp-task:Task', NS):
         task_id = task.get('Id', '')
         name = task.get('Name', '')
-        # .NET assembly-qualified type names look like "Ns.Sub.TypeName, AssemblyName".
-        # Drop the assembly qualifier first, then take the final type name segment.
-        raw_type = task.get('Type', '')
-        type_only = raw_type.split(',', 1)[0].strip()
-        task_type = type_only.rsplit('.', 1)[-1] if type_only else ''
+        task_type = _strip_assembly(task.get('Type', ''))
         comp_id = task.get('ComponentId', '')
         scope = task.get('Scope', '')
 
@@ -218,7 +311,7 @@ def parse_component_tasks(path: Path) -> dict:
 def load_project(folder: Path) -> DWProject:
     """Load all DriveWorks project files from a folder (recursively)"""
     proj = DWProject()
-    
+
     # Recursively find all project.xml files
     for proj_file in folder.rglob('project.xml'):
         print(f"  Found: {proj_file}")
@@ -226,7 +319,10 @@ def load_project(folder: Path) -> DWProject:
         proj.variables.update(data['variables'])
         proj.calc_tables.update(data['calc_tables'])
         proj.documents.update(data['documents'])
-    
+        proj.data_tables.update(data.get('data_tables', {}))
+        proj.spec_macros.update(data.get('spec_macros', {}))
+        proj.categories.update(data.get('categories', {}))
+
     # Recursively find all designMaster.xml files
     for dm_file in folder.rglob('designMaster.xml'):
         print(f"  Found: {dm_file}")
@@ -235,7 +331,8 @@ def load_project(folder: Path) -> DWProject:
         proj.special_vars.update(data['special_vars'])
         proj.lookup_tables.update(data['lookup_tables'])
         proj.variables.update(data.get('variables', {}))
-    
+        proj.nav_steps.update(data.get('nav_steps', {}))
+
     # Recursively find all TDM files
     for tdm_file in folder.rglob('*.tdm'):
         print(f"  Found: {tdm_file}")
@@ -244,10 +341,18 @@ def load_project(folder: Path) -> DWProject:
         proj.special_vars.update(data['special_vars'])
         proj.lookup_tables.update(data['lookup_tables'])
         proj.variables.update(data.get('variables', {}))
-    
+        proj.nav_steps.update(data.get('nav_steps', {}))
+
     # Recursively find all componentTasks.xml files
     for ct_file in folder.rglob('componentTasks.xml'):
         print(f"  Found: {ct_file}")
         proj.component_tasks.update(parse_component_tasks(ct_file))
+
+    # Resolve category GUIDs on Variables to human-readable names. Leave the
+    # raw GUID in place if the project never declared a matching Category.
+    if proj.categories:
+        for v in proj.variables.values():
+            if v.category and v.category in proj.categories:
+                v.category = proj.categories[v.category]
     
     return proj

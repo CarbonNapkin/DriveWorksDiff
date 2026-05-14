@@ -14,6 +14,9 @@ from .comparers import (
     compare_component_tasks,
     compare_documents,
     compare_lookup_tables,
+    compare_data_tables,
+    compare_nav_steps,
+    compare_spec_macros,
 )
 
 
@@ -51,6 +54,18 @@ def generate_html_report(old_proj: DWProject, new_proj: DWProject,
     # --- Lookup Tables Section ---
     lt_html, lt_stats = compare_lookup_tables(old_proj.lookup_tables, new_proj.lookup_tables)
     sections.append(('Lookup Tables', lt_html, lt_stats))
+
+    # --- Data Tables Section ---
+    dt_html, dt_stats = compare_data_tables(old_proj.data_tables, new_proj.data_tables)
+    sections.append(('Data Tables', dt_html, dt_stats))
+
+    # --- Specification Macros Section ---
+    macro_html, macro_stats = compare_spec_macros(old_proj.spec_macros, new_proj.spec_macros)
+    sections.append(('Specification Macros', macro_html, macro_stats))
+
+    # --- Navigation Steps Section ---
+    nav_html, nav_stats = compare_nav_steps(old_proj.nav_steps, new_proj.nav_steps)
+    sections.append(('Navigation Steps', nav_html, nav_stats))
     
     # Aggregate summary
     for _, _, stats in sections:

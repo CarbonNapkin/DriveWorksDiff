@@ -47,6 +47,37 @@ class ComponentTask:
 
 
 @dataclass
+class SpecMacroTask:
+    title: str = ""
+    task_type: str = ""
+    # Property name -> formula string. Empty formula means a static value.
+    properties: dict = field(default_factory=dict)
+
+
+@dataclass
+class SpecMacro:
+    name: str
+    # Ordered by appearance in the XML so reordering shows up in diffs.
+    tasks: list = field(default_factory=list)
+
+
+@dataclass
+class NavStep:
+    name: str
+    step_type: str = ""
+    next_step_rule: str = ""
+    next_step_value: str = ""
+    next_macro_value: str = ""
+    previous_macro_value: str = ""
+
+
+@dataclass
+class DataTableDef:
+    name: str
+    table_type: str = ""
+
+
+@dataclass
 class DWProject:
     """Holds all parsed DriveWorks project data"""
     name: str = ""
@@ -57,3 +88,8 @@ class DWProject:
     component_tasks: dict = field(default_factory=dict)
     documents: dict = field(default_factory=dict)
     lookup_tables: dict = field(default_factory=dict)
+    spec_macros: dict = field(default_factory=dict)
+    nav_steps: dict = field(default_factory=dict)
+    data_tables: dict = field(default_factory=dict)
+    # GUID -> human-readable name, used to resolve Variable.category
+    categories: dict = field(default_factory=dict)
