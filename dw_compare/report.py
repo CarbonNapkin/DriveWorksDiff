@@ -296,6 +296,20 @@ def generate_html_report(old_proj: DWProject, new_proj: DWProject,
         tr.modified {{ background: var(--modified-bg); }}
         tr.modified:hover {{ background: var(--modified-bg-strong); }}
 
+        /* Group-start marks the first row of a parent-child group (Form ->
+           Control -> Property, Macro -> Task -> Property, CalcTable Column
+           -> Scope). Repeated cells are blank on later rows, so this border
+           draws the visible parent boundary. */
+        tbody tr.group-start td {{ border-top: 2px solid #b8bcc4; }}
+        tbody tr.group-start:first-child td {{ border-top: none; }}
+        /* The first one or two cells of a row are identity cells; on later
+           rows in a group they are blank. Give them slightly muted styling so
+           the eye reads the grouped chunk as one block. */
+        td.grouper {{ font-weight: 500; color: #2a2c30; background: rgba(0,0,0,0.015); }}
+        tr.added td.grouper, tr.removed td.grouper, tr.modified td.grouper {{
+            background: rgba(0,0,0,0.04);
+        }}
+
         .formula {{
             font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
             font-size: 12px;

@@ -165,14 +165,21 @@ def compare_special_vars(old: dict, new: dict) -> tuple[str, dict]:
     return html, stats
 
 
-def _calc_row(col: str, scope: str, status: str, old_val: str, new_val: str) -> str:
+def _calc_row(col: str, scope: str, status: str, old_val: str, new_val: str,
+              first_in_group: bool = False) -> str:
+    """Emit one row of a calculation-table diff. The Column cell is blanked
+    on rows after the first row in that column's group, matching the same
+    grouping treatment used by Forms and Macros."""
     badge = f'<span class="badge badge-{status}">{status.title()}</span>'
     if status == 'modified':
         diff = inline_diff(old_val, new_val)
     else:
         diff = escape(new_val or old_val)
+    cls = f'{status}{" group-start" if first_in_group else ""}'
+    col_cell = escape(col) if first_in_group else ''
     return (
-        f'<tr class="{status}"><td>{escape(col)}</td><td>{escape(scope)}</td>'
+        f'<tr class="{cls}"><td class="grouper">{col_cell}</td>'
+        f'<td>{escape(scope)}</td>'
         f'<td>{badge}</td><td class="formula">{diff}</td></tr>'
     )
 
@@ -203,33 +210,35 @@ def compare_calc_tables(old: dict, new: dict) -> tuple[str, dict]:
             old_col = old_tbl.columns.get(col, {'common': '', 'rows': {}})
             new_col = new_tbl.columns.get(col, {'common': '', 'rows': {}})
 
+            # Buffer this column's rows so we can mark the first row as
+            # group-start without knowing ahead of time which row that is.
+            col_rows = []
+
             if col not in old_tbl.columns:
-                rows_html.append(_calc_row(col, 'Common', 'added', '', new_col['common']))
+                col_rows.append(('Common', 'added', '', new_col['common']))
                 for idx in sorted(new_col['rows']):
-                    rows_html.append(_calc_row(col, f'Row {idx}', 'added', '', new_col['rows'][idx]))
-                continue
-
-            if col not in new_tbl.columns:
-                rows_html.append(_calc_row(col, 'Common', 'removed', old_col['common'], ''))
+                    col_rows.append((f'Row {idx}', 'added', '', new_col['rows'][idx]))
+            elif col not in new_tbl.columns:
+                col_rows.append(('Common', 'removed', old_col['common'], ''))
                 for idx in sorted(old_col['rows']):
-                    rows_html.append(_calc_row(col, f'Row {idx}', 'removed', old_col['rows'][idx], ''))
-                continue
+                    col_rows.append((f'Row {idx}', 'removed', old_col['rows'][idx], ''))
+            else:
+                if old_col['common'] != new_col['common']:
+                    col_rows.append(('Common', 'modified', old_col['common'], new_col['common']))
+                for idx in sorted(set(old_col['rows']) | set(new_col['rows'])):
+                    o = old_col['rows'].get(idx, '')
+                    n = new_col['rows'].get(idx, '')
+                    if o == n:
+                        continue
+                    if not o:
+                        col_rows.append((f'Row {idx}', 'added', '', n))
+                    elif not n:
+                        col_rows.append((f'Row {idx}', 'removed', o, ''))
+                    else:
+                        col_rows.append((f'Row {idx}', 'modified', o, n))
 
-            if old_col['common'] != new_col['common']:
-                rows_html.append(_calc_row(col, 'Common', 'modified', old_col['common'], new_col['common']))
-
-            row_indices = set(old_col['rows']) | set(new_col['rows'])
-            for idx in sorted(row_indices):
-                o = old_col['rows'].get(idx, '')
-                n = new_col['rows'].get(idx, '')
-                if o == n:
-                    continue
-                if not o:
-                    rows_html.append(_calc_row(col, f'Row {idx}', 'added', '', n))
-                elif not n:
-                    rows_html.append(_calc_row(col, f'Row {idx}', 'removed', o, ''))
-                else:
-                    rows_html.append(_calc_row(col, f'Row {idx}', 'modified', o, n))
+            for i, (scope, status, old_v, new_v) in enumerate(col_rows):
+                rows_html.append(_calc_row(col, scope, status, old_v, new_v, first_in_group=(i == 0)))
 
         if rows_html:
             stats['modified'] += 1
@@ -595,7 +604,10 @@ def _compare_prop_dicts(old_props: dict, new_props: dict) -> list:
 
 
 def _form_change_row(control: str, ctrl_type: str, prop: str, status: str,
-                     old_p, new_p) -> str:
+                     old_p, new_p, first_in_group: bool = True) -> str:
+    """Render one property change row. Only the first row in a control's group
+    shows the control name and type; later rows blank those cells so the
+    repeated identity does not visually drown out the per-property changes."""
     badge = f'<span class="badge badge-{status}">{status.title()}</span>'
     old_v = _fmt_prop(old_p)
     new_v = _fmt_prop(new_p)
@@ -603,12 +615,13 @@ def _form_change_row(control: str, ctrl_type: str, prop: str, status: str,
         cell = inline_diff(old_v, new_v)
     else:
         cell = escape(new_v or old_v)
-    # Note static-flag changes inline if the formula/value did not change but
-    # static did. (Won't reach here because _compare_prop_dicts filters.)
+    classes = status + (' group-start' if first_in_group else '')
+    name_cell = escape(control) if first_in_group else ''
+    type_cell = escape(ctrl_type) if first_in_group else ''
     return (
-        f'<tr class="{status}">'
-        f'<td>{escape(control)}</td>'
-        f'<td>{escape(ctrl_type)}</td>'
+        f'<tr class="{classes}">'
+        f'<td class="grouper">{name_cell}</td>'
+        f'<td class="grouper">{type_cell}</td>'
         f'<td>{escape(prop)}</td>'
         f'<td>{badge}</td>'
         f'<td class="formula">{cell}</td>'
@@ -642,9 +655,13 @@ def compare_forms(old: dict, new: dict) -> tuple[str, dict]:
         of, nf = old[name], new[name]
         change_rows = []
 
-        # Form-level property changes
-        for prop, status, op, np in _compare_prop_dicts(of.form_props, nf.form_props):
-            change_rows.append(_form_change_row('(form)', '', prop, status, op, np))
+        # Form-level property changes form a single group keyed on "(form)".
+        form_prop_changes = _compare_prop_dicts(of.form_props, nf.form_props)
+        for i, (prop, status, op, np) in enumerate(form_prop_changes):
+            change_rows.append(_form_change_row(
+                '(form-level rules)', 'Form', prop, status, op, np,
+                first_in_group=(i == 0),
+            ))
 
         c_added, c_removed, c_common = compare_dicts(of.controls, nf.controls)
 
@@ -652,8 +669,9 @@ def compare_forms(old: dict, new: dict) -> tuple[str, dict]:
             c = nf.controls[ctrl_name]
             badge = '<span class="badge badge-added">Added</span>'
             change_rows.append(
-                f'<tr class="added"><td>{escape(ctrl_name)}</td>'
-                f'<td>{escape(c.control_type)}</td>'
+                f'<tr class="added group-start">'
+                f'<td class="grouper">{escape(ctrl_name)}</td>'
+                f'<td class="grouper">{escape(c.control_type)}</td>'
                 f'<td colspan="2">{badge}</td>'
                 f'<td>{len(c.props)} properties</td></tr>'
             )
@@ -662,8 +680,9 @@ def compare_forms(old: dict, new: dict) -> tuple[str, dict]:
             c = of.controls[ctrl_name]
             badge = '<span class="badge badge-removed">Removed</span>'
             change_rows.append(
-                f'<tr class="removed"><td>{escape(ctrl_name)}</td>'
-                f'<td>{escape(c.control_type)}</td>'
+                f'<tr class="removed group-start">'
+                f'<td class="grouper">{escape(ctrl_name)}</td>'
+                f'<td class="grouper">{escape(c.control_type)}</td>'
                 f'<td colspan="2">{badge}</td>'
                 f'<td>{len(c.props)} properties</td></tr>'
             )
@@ -671,25 +690,39 @@ def compare_forms(old: dict, new: dict) -> tuple[str, dict]:
         for ctrl_name in sorted(c_common):
             o_ctrl = of.controls[ctrl_name]
             n_ctrl = nf.controls[ctrl_name]
-            if o_ctrl.control_type != n_ctrl.control_type:
-                # Type swap is a structural change worth its own row.
+            type_changed = o_ctrl.control_type != n_ctrl.control_type
+            prop_changes = _compare_prop_dicts(o_ctrl.props, n_ctrl.props)
+            if not type_changed and not prop_changes:
+                continue
+
+            first_done = False
+
+            if type_changed:
+                # First row of the group is the type-swap notice; later prop
+                # rows are blank in the name/type cells.
                 badge = '<span class="badge badge-modified">Type changed</span>'
                 change_rows.append(
-                    f'<tr class="modified"><td>{escape(ctrl_name)}</td>'
-                    f'<td class="formula">{inline_diff(o_ctrl.control_type, n_ctrl.control_type)}</td>'
-                    f'<td colspan="2">{badge}</td>'
-                    f'<td>control type</td></tr>'
+                    f'<tr class="modified group-start">'
+                    f'<td class="grouper">{escape(ctrl_name)}</td>'
+                    f'<td class="grouper formula">{inline_diff(o_ctrl.control_type, n_ctrl.control_type)}</td>'
+                    f'<td>(control type)</td>'
+                    f'<td>{badge}</td>'
+                    f'<td></td></tr>'
                 )
-            for prop, status, op, np in _compare_prop_dicts(o_ctrl.props, n_ctrl.props):
-                change_rows.append(
-                    _form_change_row(ctrl_name, n_ctrl.control_type, prop, status, op, np)
-                )
+                first_done = True
+
+            for prop, status, op, np in prop_changes:
+                change_rows.append(_form_change_row(
+                    ctrl_name, n_ctrl.control_type, prop, status, op, np,
+                    first_in_group=not first_done,
+                ))
+                first_done = True
 
         if change_rows:
             stats['modified'] += 1
             html_parts.append(
                 f'<h3 class="modified">📝 {escape(name)} <span class="badge badge-modified">Modified</span></h3>'
-                '<table><thead><tr><th>Control</th><th>Type</th><th>Property</th>'
+                '<table class="grouped"><thead><tr><th>Control</th><th>Type</th><th>Property</th>'
                 '<th>Status</th><th>Formula / Value</th></tr></thead>'
                 f'<tbody>{"".join(change_rows)}</tbody></table>'
             )
@@ -707,10 +740,11 @@ def _macro_task_rows(task_key: str, status: str, old_task, new_task, prop_change
         t = new_task if status == 'added' else old_task
         n_props = len(t.properties)
         return (
-            f'<tr class="{status}"><td>{escape(task_key)}</td><td>{badge}</td>'
-            f'<td colspan="2">{n_props} properties</td></tr>'
+            f'<tr class="{status} group-start"><td class="grouper">{escape(task_key)}</td>'
+            f'<td>{badge}</td><td colspan="2">{n_props} properties</td></tr>'
         )
-    # Modified case, emit one row per changed property
+    # Modified case, emit one row per changed property. First row carries the
+    # task name and a group-start marker so the table groups visually.
     rows = []
     first = True
     for prop_name, p_status, old_val, new_val in prop_changes or []:
@@ -721,8 +755,9 @@ def _macro_task_rows(task_key: str, status: str, old_task, new_task, prop_change
             cell = escape(new_val or old_val)
         task_cell = escape(task_key) if first else ''
         status_cell = badge if first else ''
+        cls = f'{p_status}{" group-start" if first else ""}'
         rows.append(
-            f'<tr class="{p_status}"><td>{task_cell}</td><td>{status_cell}</td>'
+            f'<tr class="{cls}"><td class="grouper">{task_cell}</td><td>{status_cell}</td>'
             f'<td>{escape(prop_name)} {p_badge}</td><td class="formula">{cell}</td></tr>'
         )
         first = False
