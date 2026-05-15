@@ -46,4 +46,4 @@ self-contained HTML diff report.
 - Self-contained HTML output suitable for sharing by email or hosting on
   an internal share.
 
-[1.0.0]: https://github.com/Carbonnapkin/DriveWorksDiff/releases/tag/v1.0.0
+[1.0.0]: https://github.com/CarbonNapkin/DriveWorksDiff/releases/tag/v1.0.0

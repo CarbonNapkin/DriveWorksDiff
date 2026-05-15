@@ -7,5 +7,5 @@ import cycles.
 
 __version__ = '1.0.0'
 __author__ = 'Base 10 Consultants'
-__url__ = 'https://github.com/Carbonnapkin/DriveWorksDiff'
+__url__ = 'https://github.com/CarbonNapkin/DriveWorksDiff'
 __license__ = 'MIT'
