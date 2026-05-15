@@ -310,6 +310,30 @@ def generate_html_report(old_proj: DWProject, new_proj: DWProject,
             background: rgba(0,0,0,0.04);
         }}
 
+        /* Lookup-table grids render the actual CSV data with per-cell
+           highlighting. Unchanged rows are hidden by default; the
+           "Show unchanged lookup rows" filter brings them back. */
+        table.lookup-grid {{ table-layout: auto; }}
+        table.lookup-grid th {{
+            top: var(--header-stack);
+            white-space: nowrap;
+        }}
+        table.lookup-grid th.col-added {{ background: var(--added-bg); }}
+        table.lookup-grid th.col-removed {{ background: var(--removed-bg); }}
+        table.lookup-grid td {{
+            font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+            font-size: 12px;
+            max-width: 320px;
+            overflow-wrap: anywhere;
+        }}
+        table.lookup-grid td.cell-changed {{
+            background: var(--modified-bg-strong);
+            font-weight: 500;
+        }}
+        table.lookup-grid td.cell-added {{ background: var(--added-bg-strong); }}
+        table.lookup-grid td.cell-removed {{ background: var(--removed-bg-strong); }}
+        body:not(.show-lookup-unchanged) table.lookup-grid tbody tr.unchanged {{ display: none; }}
+
         .formula {{
             font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
             font-size: 12px;
@@ -361,6 +385,7 @@ def generate_html_report(old_proj: DWProject, new_proj: DWProject,
         <label><input type="checkbox" id="showModified" checked onchange="filterRows()"> Modified</label>
         <label><input type="checkbox" id="showUnchanged" onchange="filterRows()"> Unchanged rows</label>
         <label><input type="checkbox" id="showQuietSections" onchange="applySectionVisibility()"> Show unchanged sections</label>
+        <label><input type="checkbox" id="showLookupUnchanged" onchange="applyLookupRowVisibility()"> Show unchanged lookup rows</label>
         <button onclick="expandAll(true)">Expand all</button>
         <button onclick="expandAll(false)">Collapse all</button>
     </div>
@@ -507,6 +532,11 @@ def generate_html_report(old_proj: DWProject, new_proj: DWProject,
             document.body.classList.toggle('hide-quiet', !show);
         }
 
+        function applyLookupRowVisibility() {
+            const show = document.getElementById('showLookupUnchanged').checked;
+            document.body.classList.toggle('show-lookup-unchanged', show);
+        }
+
         function expandAll(open) {
             document.querySelectorAll('.section').forEach(s => {
                 if (open) s.classList.remove('collapsed');
@@ -516,6 +546,7 @@ def generate_html_report(old_proj: DWProject, new_proj: DWProject,
 
         // Default: hide sections with no changes; user can toggle them back on.
         applySectionVisibility();
+        applyLookupRowVisibility();
         filterRows();
     </script>
 </body>

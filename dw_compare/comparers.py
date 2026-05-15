@@ -2,6 +2,8 @@
 Comparison functions for DriveWorks project elements.
 """
 
+import csv
+import io
 from difflib import SequenceMatcher
 from html import escape
 
@@ -334,37 +336,182 @@ def compare_documents(old: dict, new: dict) -> tuple[str, dict]:
     return html, stats
 
 
+def _parse_csv_table(body: str) -> tuple:
+    """Parse a CSV string into (headers, rows). Rows are lists of strings."""
+    if not body or not body.strip():
+        return [], []
+    try:
+        all_rows = list(csv.reader(io.StringIO(body)))
+    except Exception:
+        return [], []
+    if not all_rows:
+        return [], []
+    return all_rows[0], all_rows[1:]
+
+
+def _row_at(row: list, idx: int) -> str:
+    """Safe cell access, padding short rows with empty strings."""
+    if idx is None or idx < 0 or idx >= len(row):
+        return ''
+    return row[idx]
+
+
+def _render_lookup_grid(name: str, top_status: str, old_body: str, new_body: str) -> str:
+    """Render one lookup table as a cell-highlighted grid. top_status is the
+    table-level status ('added' / 'removed' / 'modified') used to color the
+    h3 header. The diff between old_body and new_body decides per-cell
+    coloring inside the grid."""
+    old_headers, old_rows = _parse_csv_table(old_body)
+    new_headers, new_rows = _parse_csv_table(new_body)
+
+    old_set = set(old_headers)
+    new_set = set(new_headers)
+
+    # Column display order: new headers first, then any old-only headers at
+    # the end so removed columns are visible but do not push everything around.
+    display_cols = []
+    for h in new_headers:
+        display_cols.append((h, 'added' if h not in old_set else 'common'))
+    for h in old_headers:
+        if h not in new_set:
+            display_cols.append((h, 'removed'))
+
+    old_col_idx = {h: i for i, h in enumerate(old_headers)}
+    new_col_idx = {h: i for i, h in enumerate(new_headers)}
+
+    # Row keys = first column. If duplicates exist, fall back to row index.
+    old_keys = [r[0] if r else '' for r in old_rows]
+    new_keys = [r[0] if r else '' for r in new_rows]
+    duplicate_keys = (
+        len(set(old_keys)) != len(old_keys) or
+        len(set(new_keys)) != len(new_keys)
+    )
+
+    # Build the diff_rows list. Each entry is (status, old_row_or_None, new_row_or_None).
+    diff_rows = []
+    if duplicate_keys:
+        # Pair by index. Beyond either length, the missing side is None.
+        n = max(len(old_rows), len(new_rows))
+        for i in range(n):
+            o = old_rows[i] if i < len(old_rows) else None
+            n_row = new_rows[i] if i < len(new_rows) else None
+            if o is None:
+                diff_rows.append(('added', None, n_row))
+            elif n_row is None:
+                diff_rows.append(('removed', o, None))
+            elif o == n_row:
+                diff_rows.append(('unchanged', o, n_row))
+            else:
+                diff_rows.append(('modified', o, n_row))
+    else:
+        old_by_key = dict(zip(old_keys, old_rows))
+        new_by_key = dict(zip(new_keys, new_rows))
+        for key, new_row in zip(new_keys, new_rows):
+            if key in old_by_key:
+                old_row = old_by_key[key]
+                status = 'unchanged' if old_row == new_row else 'modified'
+                diff_rows.append((status, old_row, new_row))
+            else:
+                diff_rows.append(('added', None, new_row))
+        for key, old_row in zip(old_keys, old_rows):
+            if key not in new_by_key:
+                diff_rows.append(('removed', old_row, None))
+
+    counts = {'added': 0, 'removed': 0, 'modified': 0, 'unchanged': 0}
+    for status, *_ in diff_rows:
+        counts[status] += 1
+
+    # Header row with per-column status badges
+    header_cells = []
+    for h, s in display_cols:
+        suffix = ''
+        if s == 'added':
+            suffix = ' <span class="badge badge-added">New</span>'
+        elif s == 'removed':
+            suffix = ' <span class="badge badge-removed">Old</span>'
+        cls = f' class="col-{s}"' if s != 'common' else ''
+        header_cells.append(f'<th{cls}>{escape(h)}{suffix}</th>')
+
+    # Body rows
+    body_rows = []
+    for status, old_row, new_row in diff_rows:
+        cells = []
+        for h, col_status in display_cols:
+            old_idx = old_col_idx.get(h)
+            new_idx = new_col_idx.get(h)
+            old_val = _row_at(old_row, old_idx) if old_row is not None else ''
+            new_val = _row_at(new_row, new_idx) if new_row is not None else ''
+
+            if col_status == 'added':
+                # Column only exists in new. Show new value (blank for removed rows).
+                cells.append(f'<td class="cell-added">{escape(new_val)}</td>')
+            elif col_status == 'removed':
+                # Column only exists in old. Show old value (blank for added rows).
+                cells.append(f'<td class="cell-removed">{escape(old_val)}</td>')
+            else:
+                # Common column. Compare cells.
+                if status == 'added':
+                    cells.append(f'<td>{escape(new_val)}</td>')
+                elif status == 'removed':
+                    cells.append(f'<td>{escape(old_val)}</td>')
+                elif old_val != new_val:
+                    cells.append(f'<td class="cell-changed">{inline_diff(old_val, new_val)}</td>')
+                else:
+                    cells.append(f'<td>{escape(new_val)}</td>')
+        body_rows.append(f'<tr class="{status}">{"".join(cells)}</tr>')
+
+    # Header h3 badges show change counts
+    sub_badges = ''
+    if counts['added']: sub_badges += f' <span class="badge badge-added">+{counts["added"]}</span>'
+    if counts['removed']: sub_badges += f' <span class="badge badge-removed">-{counts["removed"]}</span>'
+    if counts['modified']: sub_badges += f' <span class="badge badge-modified">~{counts["modified"]}</span>'
+
+    if top_status == 'added':
+        icon = '➕'
+        label = '<span class="badge badge-added">Added</span>'
+    elif top_status == 'removed':
+        icon = '➖'
+        label = '<span class="badge badge-removed">Removed</span>'
+    else:
+        icon = '📋'
+        label = '<span class="badge badge-modified">Modified</span>'
+
+    dimension_note = (
+        f'<small>{len(diff_rows)} rows × {len(display_cols)} cols'
+        + (', keyed by row index (duplicate first-column values)' if duplicate_keys else '')
+        + '</small>'
+    )
+
+    return (
+        f'<h3 class="{top_status}">{icon} {escape(name)} {label}{sub_badges} {dimension_note}</h3>'
+        f'<table class="lookup-grid"><thead><tr>{"".join(header_cells)}</tr></thead>'
+        f'<tbody>{"".join(body_rows)}</tbody></table>'
+    )
+
+
 def compare_lookup_tables(old: dict, new: dict) -> tuple[str, dict]:
-    """Compare lookup tables"""
+    """Compare lookup tables, rendering each modified table as a cell-
+    highlighted grid keyed by the first column. Unchanged rows are emitted
+    with class="unchanged" so the global lookup-row toggle can hide them."""
     added, removed, common = compare_dicts(old, new)
     stats = {'added': len(added), 'removed': len(removed), 'modified': 0, 'unchanged': 0}
-    
-    rows = []
-    
-    for name in sorted(added):
-        rows.append(f'<tr class="added"><td>{escape(name)}</td><td><span class="badge badge-added">Added</span></td>'
-                   f'<td>{len(new[name])} chars</td></tr>')
-    
-    for name in sorted(removed):
-        rows.append(f'<tr class="removed"><td>{escape(name)}</td><td><span class="badge badge-removed">Removed</span></td>'
-                   f'<td>{len(old[name])} chars</td></tr>')
-    
-    for name in sorted(common):
-        if old[name] != new[name]:
-            stats['modified'] += 1
-            rows.append(f'<tr class="modified"><td>{escape(name)}</td><td><span class="badge badge-modified">Modified</span></td>'
-                       f'<td>{len(new[name])} chars</td></tr>')
-        else:
-            stats['unchanged'] += 1
-            rows.append(f'<tr class="unchanged"><td>{escape(name)}</td><td>—</td>'
-                       f'<td>{len(old[name])} chars</td></tr>')
-    
-    html = f'''<table>
-        <thead><tr><th>Table Name</th><th>Status</th><th>Size</th></tr></thead>
-        <tbody>{"".join(rows) if rows else '<tr><td colspan="3" class="empty">No lookup tables found</td></tr>'}</tbody>
-    </table>'''
+    html_parts = []
 
-    return html, stats
+    for name in sorted(added):
+        html_parts.append(_render_lookup_grid(name, 'added', '', new[name]))
+
+    for name in sorted(removed):
+        html_parts.append(_render_lookup_grid(name, 'removed', old[name], ''))
+
+    for name in sorted(common):
+        if old[name] == new[name]:
+            stats['unchanged'] += 1
+            continue
+        stats['modified'] += 1
+        html_parts.append(_render_lookup_grid(name, 'modified', old[name], new[name]))
+
+    body = ''.join(html_parts) if html_parts else '<p class="empty">No lookup tables found</p>'
+    return body, stats
 
 
 def compare_data_tables(old: dict, new: dict) -> tuple[str, dict]:
