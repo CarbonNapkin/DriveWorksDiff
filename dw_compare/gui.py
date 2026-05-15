@@ -17,6 +17,7 @@ import tkinter as tk
 from tkinter import Tk, StringVar, BooleanVar, END, DISABLED, NORMAL, filedialog, messagebox
 from tkinter.scrolledtext import ScrolledText
 
+from ._version import __version__, __author__, __url__, __license__
 from .parsers import load_project
 from .report import generate_html_report
 
@@ -27,6 +28,7 @@ except ImportError:
 
 
 PROJX_FILETYPES = [('DriveWorks project', '*.driveprojx'), ('All files', '*.*')]
+APP_TITLE = f'DriveWorks Project Compare {__version__}'
 
 
 class _QueueWriter:
@@ -47,8 +49,9 @@ class _QueueWriter:
 class CompareApp:
     def __init__(self, root: Tk):
         self.root = root
-        root.title('DriveWorks Project Compare')
+        root.title(APP_TITLE)
         root.geometry('720x520')
+        self._build_menu()
 
         self.old_path = StringVar()
         self.new_path = StringVar()
@@ -60,6 +63,58 @@ class CompareApp:
 
         self._build_ui()
         self._drain_log()
+
+    def _build_menu(self) -> None:
+        """Standard menubar with Help. Integrates with the macOS global menu
+        automatically. The File menu carries only Quit so the keyboard
+        shortcut shows up where users expect it."""
+        menubar = tk.Menu(self.root)
+
+        file_menu = tk.Menu(menubar, tearoff=False)
+        file_menu.add_command(label='Quit', accelerator='Cmd+Q' if sys.platform == 'darwin' else 'Ctrl+Q',
+                              command=self.root.destroy)
+        menubar.add_cascade(label='File', menu=file_menu)
+
+        help_menu = tk.Menu(menubar, tearoff=False, name='help')
+        help_menu.add_command(label='Open Documentation', command=self._open_docs)
+        help_menu.add_separator()
+        help_menu.add_command(label='About DriveWorks Project Compare', command=self._show_about)
+        menubar.add_cascade(label='Help', menu=help_menu)
+
+        self.root.config(menu=menubar)
+
+    def _open_docs(self) -> None:
+        webbrowser.open(__url__)
+
+    def _show_about(self) -> None:
+        """Custom About window. messagebox.showinfo works but a Toplevel
+        gives us a clickable repo link and slightly nicer typography."""
+        top = tk.Toplevel(self.root)
+        top.title('About')
+        top.resizable(False, False)
+        bg = '#f4f4f4'
+        top.configure(bg=bg)
+
+        pad = {'padx': 16, 'pady': 4}
+        tk.Label(top, text='DriveWorks Project Compare', bg=bg,
+                 font=('TkDefaultFont', 14, 'bold')).pack(**pad, anchor='w')
+        tk.Label(top, text=f'Version {__version__}', bg=bg).pack(padx=16, pady=(0, 8), anchor='w')
+        tk.Label(top, text=f'© {__author__}', bg=bg).pack(padx=16, anchor='w')
+        tk.Label(top, text=f'Licensed under {__license__}', bg=bg, fg='#555').pack(padx=16, anchor='w')
+
+        link = tk.Label(top, text=__url__, bg=bg, fg='#3f51b5', cursor='hand2')
+        link.pack(padx=16, pady=(8, 4), anchor='w')
+        link.bind('<Button-1>', lambda _e: webbrowser.open(__url__))
+
+        tk.Button(top, text='Close', command=top.destroy).pack(pady=(8, 12))
+
+        # Center the dialog over the main window.
+        top.update_idletasks()
+        x = self.root.winfo_rootx() + (self.root.winfo_width() - top.winfo_width()) // 2
+        y = self.root.winfo_rooty() + (self.root.winfo_height() - top.winfo_height()) // 3
+        top.geometry(f'+{max(0, x)}+{max(0, y)}')
+        top.transient(self.root)
+        top.grab_set()
 
     def _build_ui(self) -> None:
         # Plain tk widgets (not ttk) because ttk + Tk 8.5 on modern macOS often

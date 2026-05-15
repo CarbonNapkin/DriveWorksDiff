@@ -113,14 +113,45 @@ dw_compare/
 
 ## Building as Standalone App
 
-To create a double-clickable app (no Python required for end users):
+End users do not need Python installed. Builds use PyInstaller and the
+`dw_compare.spec` file in the project root.
+
+### macOS
 
 ```bash
-pip install pyinstaller
-pyinstaller --onefile --windowed dw_compare/__main__.py -n dw_compare
+./scripts/build_mac.sh
 ```
 
-This creates `dist/dw_compare` (Mac) or `dist/dw_compare.exe` (Windows).
+Artifact lands at `dist/DriveWorksDiff.app`.
+
+### Windows
+
+In PowerShell:
+
+```powershell
+.\scripts\build_windows.ps1
+```
+
+Artifact lands at `dist\DriveWorksDiff.exe`.
+
+### Releases
+
+Tag a commit `v1.x.x` and push the tag. The GitHub Actions workflow at
+`.github/workflows/release.yml` builds Windows and macOS binaries on the
+matching runners, drafts a release, and attaches the artifacts.
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+First-run notes:
+
+- On Windows, an unsigned `.exe` triggers a "Windows protected your PC"
+  SmartScreen prompt. Click "More info" then "Run anyway". One-time per
+  machine.
+- On macOS, an unsigned `.app` needs a right-click and Open the first
+  time, then choose Open in the dialog. One-time per machine.
 
 ## License
 

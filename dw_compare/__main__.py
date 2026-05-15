@@ -14,6 +14,7 @@ import shutil
 import atexit
 from pathlib import Path
 
+from ._version import __version__
 from .parsers import load_project
 from .report import generate_html_report
 
@@ -132,6 +133,8 @@ Examples:
                        help='Do not auto-open report in browser')
     parser.add_argument('--gui', action='store_true',
                        help='Launch the graphical UI instead of running on the command line')
+    parser.add_argument('-V', '--version', action='version',
+                       version=f'DriveWorks Project Compare {__version__}')
 
     args = parser.parse_args()
 

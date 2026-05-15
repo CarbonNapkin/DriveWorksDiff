@@ -5,6 +5,7 @@ HTML report generation for DriveWorks comparison.
 from datetime import datetime
 from html import escape
 
+from ._version import __version__, __url__
 from .models import DWProject
 from .comparers import (
     compare_variables,
@@ -367,7 +368,8 @@ def generate_html_report(old_proj: DWProject, new_proj: DWProject,
     
     <div class="meta">
         <strong>Old:</strong> <span id="oldName">{escape(old_name)}</span> &nbsp;→&nbsp; <strong>New:</strong> <span id="newName">{escape(new_name)}</span><br>
-        Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+        Generated {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} by
+        <a href="{__url__}" style="color:#3f51b5;text-decoration:none;">DriveWorks Project Compare v{__version__}</a>
     </div>
     
     <div class="summary">
@@ -549,6 +551,10 @@ def generate_html_report(old_proj: DWProject, new_proj: DWProject,
         applyLookupRowVisibility();
         filterRows();
     </script>
+    <footer style="margin-top:24px;padding-top:12px;border-top:1px solid #e3e5e9;color:#888;font-size:12px;text-align:center;">
+        DriveWorks Project Compare v''' + __version__ + ''' &middot;
+        <a href="''' + __url__ + '''" style="color:#888;">''' + __url__ + '''</a>
+    </footer>
 </body>
 </html>
 '''

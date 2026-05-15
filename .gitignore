@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# PyInstaller build artifacts
+build/
+dist/
+
+# macOS
+.DS_Store
+
+# Local report output
+dw_comparison.html
+
+# Test/temp project files (large customer data, not for vcs)
+Model 630.driveprojx

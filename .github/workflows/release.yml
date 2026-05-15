@@ -1,0 +1,90 @@
+name: Build release binaries
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.target_name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target_name: windows
+            artifact_path: dist/DriveWorksDiff.exe
+            artifact_filename: DriveWorksDiff-windows.exe
+          - os: macos-latest
+            target_name: macos
+            artifact_path: dist/DriveWorksDiff.app
+            artifact_filename: DriveWorksDiff-macos.zip
+            zip_app: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller
+
+      - name: Build
+        run: python -m PyInstaller dw_compare.spec --clean --noconfirm
+
+      - name: Zip macOS app bundle
+        if: matrix.zip_app == true
+        run: |
+          cd dist
+          zip -r DriveWorksDiff-macos.zip DriveWorksDiff.app
+          cd ..
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_filename }}
+          path: |
+            ${{ matrix.target_name == 'macos' && 'dist/DriveWorksDiff-macos.zip' || matrix.artifact_path }}
+          if-no-files-found: error
+
+  release:
+    name: Attach binaries to GitHub release
+    runs-on: ubuntu-latest
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: DriveWorksDiff-windows.exe
+          path: artifacts
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: DriveWorksDiff-macos.zip
+          path: artifacts
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/DriveWorksDiff.exe
+            artifacts/DriveWorksDiff-macos.zip
+          body_path: CHANGELOG.md
+          generate_release_notes: false
+          draft: true
+          prerelease: false
