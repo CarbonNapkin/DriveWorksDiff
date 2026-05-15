@@ -89,160 +89,239 @@ def generate_html_report(old_proj: DWProject, new_proj: DWProject,
     <style>
         :root {{
             --added-bg: #e6ffec;
-            --added-border: #4caf50;
+            --added-bg-strong: #c8f0d3;
+            --added-border: #2e9b40;
             --removed-bg: #ffebe9;
-            --removed-border: #f44336;
+            --removed-bg-strong: #f7c8c4;
+            --removed-border: #d33b30;
             --modified-bg: #fff8e1;
-            --modified-border: #ff9800;
+            --modified-bg-strong: #ffe9a8;
+            --modified-border: #e6890c;
             --unchanged-bg: #f5f5f5;
+            --rule-bg: #f7f8fa;
+            --header-stack: 44px;
         }}
-        
+
         * {{ box-sizing: border-box; }}
-        
+
         body {{
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            line-height: 1.6;
+            line-height: 1.4;
             max-width: 1400px;
             margin: 0 auto;
-            padding: 20px;
+            padding: 14px 16px 32px;
             background: #fafafa;
+            color: #1f2024;
         }}
-        
-        h1 {{ color: #1a237e; border-bottom: 3px solid #3f51b5; padding-bottom: 10px; }}
-        h2 {{ color: #283593; margin-top: 30px; }}
-        
+
+        h1 {{
+            color: #1a237e;
+            border-bottom: 2px solid #3f51b5;
+            padding-bottom: 6px;
+            font-size: 22px;
+            margin: 0 0 8px;
+        }}
+
+        .meta {{
+            color: #555;
+            font-size: 13px;
+            margin: 0 0 10px;
+        }}
+
         .summary {{
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 15px;
-            margin: 20px 0;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 10px;
+            margin: 10px 0 12px;
         }}
-        
+
         .stat-card {{
-            padding: 15px;
-            border-radius: 8px;
-            text-align: center;
-            font-weight: bold;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-weight: 600;
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            font-size: 13px;
         }}
-        
+        .stat-card .stat-num {{ font-size: 20px; font-weight: 700; }}
+
         .stat-added {{ background: var(--added-bg); border-left: 4px solid var(--added-border); }}
         .stat-removed {{ background: var(--removed-bg); border-left: 4px solid var(--removed-border); }}
         .stat-modified {{ background: var(--modified-bg); border-left: 4px solid var(--modified-border); }}
         .stat-unchanged {{ background: var(--unchanged-bg); border-left: 4px solid #9e9e9e; }}
-        
-        .section {{
-            background: white;
-            border-radius: 8px;
-            margin: 20px 0;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            overflow: hidden;
-        }}
-        
-        .section-header {{
-            background: #3f51b5;
-            color: white;
-            padding: 12px 20px;
-            cursor: pointer;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }}
-        
-        .section-header:hover {{ background: #303f9f; }}
-        
-        .section-content {{
-            padding: 20px;
-            max-height: 600px;
-            overflow-y: auto;
-        }}
-        
-        .section.collapsed .section-content {{ display: none; }}
-        
-        .badge {{
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-size: 12px;
-            margin-left: 8px;
-        }}
-        
-        .badge-added {{ background: var(--added-border); color: white; }}
-        .badge-removed {{ background: var(--removed-border); color: white; }}
-        .badge-modified {{ background: var(--modified-border); color: white; }}
-        
-        table {{
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 14px;
-        }}
-        
-        th, td {{
-            padding: 10px;
-            text-align: left;
-            border-bottom: 1px solid #e0e0e0;
-        }}
-        
-        th {{ background: #f5f5f5; font-weight: 600; position: sticky; top: 0; }}
-        
-        tr.added {{ background: var(--added-bg); }}
-        tr.removed {{ background: var(--removed-bg); }}
-        tr.modified {{ background: var(--modified-bg); }}
-        
-        .formula {{
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 13px;
-            white-space: pre-wrap;
-            word-break: break-all;
-            background: #f8f8f8;
-            padding: 4px 8px;
-            border-radius: 4px;
-            max-width: 600px;
-        }}
-        
-        span.added {{
-            background: #acf2bd;
-            padding: 1px 3px;
-            border-radius: 3px;
-        }}
-        
-        span.removed {{
-            background: #fdb8c0;
-            padding: 1px 3px;
-            border-radius: 3px;
-            text-decoration: line-through;
-        }}
-        
-        .meta {{
-            color: #666;
-            font-size: 14px;
-            margin-bottom: 20px;
-        }}
-        
-        .empty {{ color: #999; font-style: italic; }}
-        
-        .toggle {{ font-size: 20px; }}
-        
+
+        /* Filter bar sticks at top of viewport while scrolling. */
         .filter-bar {{
-            margin: 10px 0;
-            padding: 12px;
-            background: #f0f0f0;
-            border-radius: 4px;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            margin: 0 0 14px;
+            padding: 8px 10px;
+            background: rgba(255,255,255,0.92);
+            backdrop-filter: saturate(180%) blur(8px);
+            border: 1px solid #e3e5e9;
+            border-radius: 8px;
             display: flex;
             flex-wrap: wrap;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
         }}
-        
-        .filter-bar label {{ margin-right: 10px; cursor: pointer; }}
-        
+        .filter-bar label {{ cursor: pointer; font-size: 13px; }}
+        .filter-bar button {{
+            padding: 4px 10px;
+            font-size: 13px;
+            cursor: pointer;
+            border: 1px solid #c8ccd2;
+            background: #fff;
+            border-radius: 6px;
+        }}
+        .filter-bar button:hover {{ background: #f0f1f4; }}
+
         #searchBox {{
-            flex-shrink: 0;
+            flex: 1 0 220px;
+            min-width: 220px;
+            padding: 5px 10px;
+            border: 1px solid #c8ccd2;
+            border-radius: 6px;
+            font-size: 13px;
         }}
-        
         #searchBox:focus {{
             outline: 2px solid #3f51b5;
             border-color: #3f51b5;
         }}
+
+        .section {{
+            background: white;
+            border-radius: 8px;
+            margin: 10px 0;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            overflow: hidden;
+        }}
+
+        /* Sections with no changes hide entirely by default; toggle restores them. */
+        body.hide-quiet .section[data-quiet="1"] {{ display: none; }}
+
+        .section-header {{
+            background: #3f51b5;
+            color: white;
+            padding: 8px 14px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+        }}
+        .section-header:hover {{ background: #303f9f; }}
+        .section-header .title {{ font-weight: 600; }}
+
+        .section-content {{
+            padding: 0;
+            max-height: min(78vh, 780px);
+            overflow-y: auto;
+        }}
+        .section.collapsed .section-content {{ display: none; }}
+
+        /* Sticky per-group sub-headers (used by Forms, Macros, Calc Tables, etc.). */
+        .section-content > h3 {{
+            position: sticky;
+            top: 0;
+            z-index: 3;
+            margin: 0;
+            padding: 8px 14px;
+            font-size: 14px;
+            background: #fafbfd;
+            border-top: 1px solid #e6e8ec;
+            border-bottom: 1px solid #e6e8ec;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+        }}
+        .section-content > h3:first-child {{ border-top: none; }}
+        .section-content > h3.added {{ background: var(--added-bg); }}
+        .section-content > h3.removed {{ background: var(--removed-bg); }}
+        .section-content > h3.modified {{ background: var(--modified-bg); }}
+        .section-content > h3 small {{ color: #555; font-weight: 500; margin-left: 6px; }}
+
+        .section-content > p.empty {{ padding: 12px 14px; margin: 0; }}
+
+        .badge {{
+            display: inline-block;
+            padding: 1px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            margin-left: 6px;
+            vertical-align: middle;
+            white-space: nowrap;
+        }}
+        .badge-added {{ background: var(--added-border); color: white; }}
+        .badge-removed {{ background: var(--removed-border); color: white; }}
+        .badge-modified {{ background: var(--modified-border); color: white; }}
+
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }}
+
+        th, td {{
+            padding: 5px 10px;
+            text-align: left;
+            border-bottom: 1px solid #ececef;
+            vertical-align: top;
+        }}
+        td:first-child {{ word-break: break-word; }}
+
+        /* Table column header sticks just under any sticky h3. */
+        th {{
+            background: #f0f2f5;
+            font-weight: 600;
+            position: sticky;
+            top: var(--header-stack);
+            z-index: 2;
+            box-shadow: inset 0 -1px 0 #d8dbe0;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+            color: #495160;
+        }}
+        /* When no h3 sub-header is present in a section, th sits at top: 0. */
+        .section-content > table:first-child th,
+        .section-content > table:only-child th {{ top: 0; }}
+
+        tbody tr:hover {{ background: #eef1f5; }}
+        tr.added {{ background: var(--added-bg); }}
+        tr.added:hover {{ background: var(--added-bg-strong); }}
+        tr.removed {{ background: var(--removed-bg); }}
+        tr.removed:hover {{ background: var(--removed-bg-strong); }}
+        tr.modified {{ background: var(--modified-bg); }}
+        tr.modified:hover {{ background: var(--modified-bg-strong); }}
+
+        .formula {{
+            font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            word-break: break-word;
+            background: var(--rule-bg);
+            padding: 3px 7px;
+            border-radius: 4px;
+            max-width: min(60vw, 720px);
+            line-height: 1.35;
+        }}
+
+        span.added {{
+            background: #b6e8c1;
+            padding: 0 3px;
+            border-radius: 3px;
+        }}
+        span.removed {{
+            background: #f6c1c1;
+            padding: 0 3px;
+            border-radius: 3px;
+            text-decoration: line-through;
+        }}
+
+        .empty {{ color: #888; font-style: italic; }}
+        .toggle {{ font-size: 18px; user-select: none; }}
     </style>
 </head>
 <body>
@@ -254,20 +333,22 @@ def generate_html_report(old_proj: DWProject, new_proj: DWProject,
     </div>
     
     <div class="summary">
-        <div class="stat-card stat-added">➕ Added<br><span style="font-size: 24px">{summary['added']}</span></div>
-        <div class="stat-card stat-removed">➖ Removed<br><span style="font-size: 24px">{summary['removed']}</span></div>
-        <div class="stat-card stat-modified">✏️ Modified<br><span style="font-size: 24px">{summary['modified']}</span></div>
-        <div class="stat-card stat-unchanged">✓ Unchanged<br><span style="font-size: 24px">{summary['unchanged']}</span></div>
+        <div class="stat-card stat-added"><span>➕ Added</span><span class="stat-num">{summary['added']}</span></div>
+        <div class="stat-card stat-removed"><span>➖ Removed</span><span class="stat-num">{summary['removed']}</span></div>
+        <div class="stat-card stat-modified"><span>✏️ Modified</span><span class="stat-num">{summary['modified']}</span></div>
+        <div class="stat-card stat-unchanged"><span>✓ Unchanged</span><span class="stat-num">{summary['unchanged']}</span></div>
     </div>
-    
+
     <div class="filter-bar">
-        <input type="text" id="searchBox" placeholder="🔍 Search variables, formulas..." 
-               oninput="filterRows()" style="padding: 6px 12px; width: 300px; margin-right: 20px; border: 1px solid #ccc; border-radius: 4px;">
-        <button id="flipBtn" onclick="flipDirection()" style="padding: 6px 12px; margin-right: 20px; cursor: pointer; font-weight: bold;">🔄 Flip Direction</button>
-        <label><input type="checkbox" id="showAdded" checked onchange="filterRows()"> Show Added</label>
-        <label><input type="checkbox" id="showRemoved" checked onchange="filterRows()"> Show Removed</label>
-        <label><input type="checkbox" id="showModified" checked onchange="filterRows()"> Show Modified</label>
-        <label><input type="checkbox" id="showUnchanged" onchange="filterRows()"> Show Unchanged</label>
+        <input type="text" id="searchBox" placeholder="🔍 Search names, formulas..." oninput="filterRows()">
+        <button id="flipBtn" onclick="flipDirection()">🔄 Flip Direction</button>
+        <label><input type="checkbox" id="showAdded" checked onchange="filterRows()"> Added</label>
+        <label><input type="checkbox" id="showRemoved" checked onchange="filterRows()"> Removed</label>
+        <label><input type="checkbox" id="showModified" checked onchange="filterRows()"> Modified</label>
+        <label><input type="checkbox" id="showUnchanged" onchange="filterRows()"> Unchanged rows</label>
+        <label><input type="checkbox" id="showQuietSections" onchange="applySectionVisibility()"> Show unchanged sections</label>
+        <button onclick="expandAll(true)">Expand all</button>
+        <button onclick="expandAll(false)">Collapse all</button>
     </div>
 '''
     
@@ -276,13 +357,17 @@ def generate_html_report(old_proj: DWProject, new_proj: DWProject,
         if stats['added']: badges += f'<span class="badge badge-added">+{stats["added"]}</span>'
         if stats['removed']: badges += f'<span class="badge badge-removed">-{stats["removed"]}</span>'
         if stats['modified']: badges += f'<span class="badge badge-modified">~{stats["modified"]}</span>'
-        
-        collapsed = 'collapsed' if stats['added'] + stats['removed'] + stats['modified'] == 0 else ''
-        
+
+        quiet = stats['added'] + stats['removed'] + stats['modified'] == 0
+        collapsed = 'collapsed' if quiet else ''
+        unchanged_count = stats.get('unchanged', 0)
+        if quiet and unchanged_count:
+            badges += f'<span class="badge" style="background:#dadde2;color:#3b3f48">{unchanged_count} unchanged</span>'
+
         html += f'''
-    <div class="section {collapsed}">
+    <div class="section {collapsed}" data-quiet="{1 if quiet else 0}">
         <div class="section-header" onclick="this.parentElement.classList.toggle('collapsed')">
-            <span>{section_name} {badges}</span>
+            <span class="title">{section_name}{badges}</span>
             <span class="toggle">▼</span>
         </div>
         <div class="section-content">
@@ -402,6 +487,21 @@ def generate_html_report(old_proj: DWProject, new_proj: DWProject,
                 if (table && table.tagName === 'TABLE') table.style.display = show ? '' : 'none';
             });
         }
+
+        function applySectionVisibility() {
+            const show = document.getElementById('showQuietSections').checked;
+            document.body.classList.toggle('hide-quiet', !show);
+        }
+
+        function expandAll(open) {
+            document.querySelectorAll('.section').forEach(s => {
+                if (open) s.classList.remove('collapsed');
+                else s.classList.add('collapsed');
+            });
+        }
+
+        // Default: hide sections with no changes; user can toggle them back on.
+        applySectionVisibility();
         filterRows();
     </script>
 </body>
