@@ -352,7 +352,7 @@ def generate_html_report(old_proj: DWProject, new_proj: DWProject,
     <h1>🔄 DriveWorks Project Comparison</h1>
     
     <div class="meta">
-        <strong>Old:</strong> <span id="oldName">{escape(old_name)}</span> &nbsp;→&nbsp; <strong>New:</strong> <span id="newName">{escape(new_name)}</span><br>
+        <strong>Old:</strong> {escape(old_name)} &nbsp;→&nbsp; <strong>New:</strong> {escape(new_name)}<br>
         Generated {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} by
         <a href="{__url__}" style="color:#3f51b5;text-decoration:none;">DriveWorks Project Compare v{__version__}</a>
     </div>
@@ -366,7 +366,6 @@ def generate_html_report(old_proj: DWProject, new_proj: DWProject,
 
     <div class="filter-bar">
         <input type="text" id="searchBox" placeholder="🔍 Search names, formulas..." oninput="filterRows()">
-        <button id="flipBtn" onclick="flipDirection()">🔄 Flip Direction</button>
         <label><input type="checkbox" id="showAdded" checked onchange="filterRows()"> Added</label>
         <label><input type="checkbox" id="showRemoved" checked onchange="filterRows()"> Removed</label>
         <label><input type="checkbox" id="showModified" checked onchange="filterRows()"> Modified</label>
@@ -404,74 +403,6 @@ def generate_html_report(old_proj: DWProject, new_proj: DWProject,
     
     html += '''
     <script>
-        let flipped = false;
-        
-        function flipDirection() {
-            flipped = !flipped;
-            
-            // Swap old/new names
-            const oldName = document.getElementById('oldName');
-            const newName = document.getElementById('newName');
-            const temp = oldName.textContent;
-            oldName.textContent = newName.textContent;
-            newName.textContent = temp;
-            
-            // Swap added/removed classes on rows
-            document.querySelectorAll('tr.added, tr.removed').forEach(row => {
-                if (row.classList.contains('added')) {
-                    row.classList.remove('added');
-                    row.classList.add('removed');
-                } else {
-                    row.classList.remove('removed');
-                    row.classList.add('added');
-                }
-            });
-            
-            // Swap badge text
-            document.querySelectorAll('.badge-added, .badge-removed').forEach(badge => {
-                if (badge.classList.contains('badge-added')) {
-                    badge.classList.remove('badge-added');
-                    badge.classList.add('badge-removed');
-                    badge.textContent = badge.textContent.replace('Added', 'Removed').replace('New', 'Old').replace('+', '-');
-                } else {
-                    badge.classList.remove('badge-removed');
-                    badge.classList.add('badge-added');
-                    badge.textContent = badge.textContent.replace('Removed', 'Added').replace('Old', 'New').replace('-', '+');
-                }
-            });
-            
-            // Swap inline diff spans
-            document.querySelectorAll('span.added, span.removed').forEach(span => {
-                if (span.classList.contains('added')) {
-                    span.classList.remove('added');
-                    span.classList.add('removed');
-                } else {
-                    span.classList.remove('removed');
-                    span.classList.add('added');
-                }
-            });
-
-            // Swap lookup-grid per-cell and per-column highlight classes.
-            document.querySelectorAll('.cell-added, .cell-removed, .col-added, .col-removed').forEach(el => {
-                if (el.classList.contains('cell-added')) el.classList.replace('cell-added', 'cell-removed');
-                else if (el.classList.contains('cell-removed')) el.classList.replace('cell-removed', 'cell-added');
-                if (el.classList.contains('col-added')) el.classList.replace('col-added', 'col-removed');
-                else if (el.classList.contains('col-removed')) el.classList.replace('col-removed', 'col-added');
-            });
-            
-            // Swap the Added/Removed COUNTS only (labels and colors stay put).
-            const addedNum = document.querySelector('.stat-added .stat-num');
-            const removedNum = document.querySelector('.stat-removed .stat-num');
-            const tempVal = addedNum.textContent;
-            addedNum.textContent = removedNum.textContent;
-            removedNum.textContent = tempVal;
-            
-            // Update button text
-            document.getElementById('flipBtn').textContent = flipped ? '🔄 Flip Back' : '🔄 Flip Direction';
-            
-            filterRows();
-        }
-        
         function filterRows() {
             const showAdded = document.getElementById('showAdded').checked;
             const showRemoved = document.getElementById('showRemoved').checked;
@@ -518,25 +449,31 @@ def generate_html_report(old_proj: DWProject, new_proj: DWProject,
                 }
             });
 
-            // Also filter h3 headers (added/removed/modified calc tables have no row body)
+            // Group headers (h3). A header that precedes a detail table follows
+            // its rows: show it iff the table still has a visible row after
+            // filtering. This stops a search/status match *inside* a grouped
+            // section (Forms, Macros, Documents, Calc/Lookup tables) from being
+            // hidden by a header that doesn't itself contain the search term.
+            // A standalone header (an added/removed item with no detail table)
+            // is filtered by its own status and header text.
             document.querySelectorAll('.section-content h3').forEach(h3 => {
-                let headerStatus = null;
-                if (h3.classList.contains('added')) headerStatus = 'added';
-                else if (h3.classList.contains('removed')) headerStatus = 'removed';
-                else if (h3.classList.contains('modified')) headerStatus = 'modified';
+                const table = h3.nextElementSibling;
+                if (table && table.tagName === 'TABLE') {
+                    const anyVisibleRow = Array.from(table.querySelectorAll('tbody tr')).some(
+                        r => !r.querySelector('.empty') && r.style.display !== 'none'
+                    );
+                    h3.style.display = anyVisibleRow ? '' : 'none';
+                    table.style.display = anyVisibleRow ? '' : 'none';
+                    return;
+                }
 
                 let statusMatch = true;
-                if (headerStatus === 'added') statusMatch = showAdded;
-                else if (headerStatus === 'removed') statusMatch = showRemoved;
-                else if (headerStatus === 'modified') statusMatch = showModified;
+                if (h3.classList.contains('added')) statusMatch = showAdded;
+                else if (h3.classList.contains('removed')) statusMatch = showRemoved;
+                else if (h3.classList.contains('modified')) statusMatch = showModified;
 
-                const headerText = h3.textContent.toLowerCase();
-                const searchMatch = !searchText || headerText.includes(searchText);
-                const show = statusMatch && searchMatch;
-
-                h3.style.display = show ? '' : 'none';
-                const table = h3.nextElementSibling;
-                if (table && table.tagName === 'TABLE') table.style.display = show ? '' : 'none';
+                const searchMatch = !searchText || h3.textContent.toLowerCase().includes(searchText);
+                h3.style.display = (statusMatch && searchMatch) ? '' : 'none';
             });
         }
 

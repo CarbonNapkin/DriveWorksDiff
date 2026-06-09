@@ -36,6 +36,21 @@ def test_report_stamps_version():
     assert __version__ in html
 
 
+def test_report_has_no_flip_direction():  # REGRESSION (flip removed — recurring bug source)
+    html = generate_html_report(DWProject(), DWProject(), "a", "b")
+    assert "flipDirection" not in html
+    assert "Flip Direction" not in html
+    assert 'id="flipBtn"' not in html
+
+
+def test_grouped_header_filter_is_row_driven():  # REGRESSION (BUG 1: search in grouped sections)
+    # The h3 visibility pass must follow visible rows, not header text, so a
+    # search/status match inside a grouped section (Forms, Macros, Documents,
+    # Calc/Lookup tables) is not hidden by a header lacking the search term.
+    html = generate_html_report(DWProject(), DWProject(), "a", "b")
+    assert "anyVisibleRow" in html
+
+
 def test_safe_degrades_on_exception():
     def boom(_old, _new):
         raise ValueError("kaboom")

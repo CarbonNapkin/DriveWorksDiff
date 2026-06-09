@@ -278,7 +278,9 @@ class CompareApp:
             print(f'Report saved to: {output.resolve()}')
 
             if open_browser:
-                webbrowser.open(f'file://{output.resolve()}')
+                # as_uri() keeps the file:// URL well-formed on Windows and
+                # percent-encodes spaces.
+                webbrowser.open(output.resolve().as_uri())
         except Exception as e:
             print('\nERROR: ' + str(e))
             print(traceback.format_exc())

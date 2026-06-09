@@ -6,11 +6,31 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Search and status filters no longer hide matches inside grouped sections.**
+  In Forms, Specification Macros, Documents, and Calculation/Lookup tables, a
+  search term (or a status filter) that matched a *row* was hidden whenever the
+  term wasn't also in the section's header. Group headers now follow their rows:
+  a group shows whenever any of its rows is visible.
+- **Reports open reliably on Windows.** Auto-open built the `file://` URL by
+  string concatenation, which produced a malformed URL on Windows (drive
+  letters / backslashes) and left spaces unescaped. It now uses `Path.as_uri()`.
+- `.driveprojx` temp-directory cleanup now drains its tracking list, so repeated
+  comparisons in the GUI don't re-attempt deletion of already-removed folders.
+
+### Removed
+
+- The **Flip Direction** button. The report already shows additions and removals
+  side by side, so flipping only relabeled and recolored — while being a
+  recurring source of subtle display bugs. Removed in favor of re-running with
+  the projects swapped when the other framing is needed.
+
 ### Added
 
 - A pytest test suite (`tests/`) covering the comparison layer, parsers, report
-  rendering, and the update check, with a regression test for every bug fixed in
-  1.0.1 and 1.0.2.
+  rendering, the CLI entry point, and the update check, with a regression test
+  for every bug fixed in 1.0.1, 1.0.2, and the items above.
 - A **Tests** GitHub Actions workflow that runs pytest on every push and pull
   request (Python 3.10 and 3.12); release builds now run the tests first.
 

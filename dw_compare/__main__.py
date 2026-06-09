@@ -41,8 +41,11 @@ def extract_driveprojx(file_path: Path) -> Path:
 
 
 def cleanup_temp_dirs():
-    """Remove any temp directories created during extraction"""
-    for temp_dir in _temp_dirs:
+    """Remove any temp directories created during extraction. Pops as it goes so
+    a second run (e.g. in the GUI) doesn't re-attempt rmtree on already-deleted
+    dirs or let the list grow unbounded across runs."""
+    while _temp_dirs:
+        temp_dir = _temp_dirs.pop()
         try:
             shutil.rmtree(temp_dir)
         except Exception:
@@ -194,9 +197,10 @@ Examples:
     if newer:
         print(f"\nℹ️  Update available: v{newer} — {RELEASES_PAGE}")
 
-    # Auto-open in browser
+    # Auto-open in browser. Use as_uri() so the file:// URL is well-formed on
+    # Windows (drive letters / backslashes) and has spaces percent-encoded.
     if not args.no_open:
-        webbrowser.open(f'file://{args.output.resolve()}')
+        webbrowser.open(args.output.resolve().as_uri())
 
 
 if __name__ == '__main__':
