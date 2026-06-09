@@ -4,6 +4,18 @@ All notable changes to DriveWorks Project Compare are documented in this file.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **The log pane is hidden by default** and toggled from **View ▸ Show Log**.
+  The window is compact unless you open the log.
+- **A status line shows the full output path** (wrapped, so it's all visible)
+  and live progress — "Report will be saved to: …", "Comparing…", and a green
+  "Report saved to: …" or red failure notice when it finishes. With the log
+  hidden, a failed comparison also raises a dialog so it can't be missed.
+- File pickers scroll to show the end of long paths (the filename stays in view).
+
 ## [1.0.5] - 2026-06-09
 
 ### Fixed

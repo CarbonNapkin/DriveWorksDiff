@@ -1,8 +1,8 @@
 """
 Simple Tkinter GUI for the DriveWorks comparison tool.
 
-Lets the user pick two projects (folders or .driveprojx files), choose an
-output path, and run a comparison without using the command line.
+Lets the user pick two .driveprojx projects, choose an output path, and run a
+comparison without using the command line.
 """
 
 from __future__ import annotations
@@ -53,7 +53,13 @@ class CompareApp:
     def __init__(self, root: Tk):
         self.root = root
         root.title(APP_TITLE)
-        root.geometry('720x520')
+        # Compact by default; the log pane is hidden (View ▸ Show Log) and the
+        # window grows to fit it when shown.
+        self._geom_compact = '720x320'
+        self._geom_with_log = '720x560'
+        root.geometry(self._geom_compact)
+        self.show_log = BooleanVar(value=False)
+        self._busy = False
         self._build_menu()
 
         self.old_path = StringVar()
@@ -83,6 +89,11 @@ class CompareApp:
         file_menu.add_command(label='Quit', accelerator='Cmd+Q' if sys.platform == 'darwin' else 'Ctrl+Q',
                               command=self.root.destroy)
         menubar.add_cascade(label='File', menu=file_menu)
+
+        view_menu = tk.Menu(menubar, tearoff=False)
+        view_menu.add_checkbutton(label='Show Log', variable=self.show_log,
+                                  command=self._apply_log_visibility)
+        menubar.add_cascade(label='View', menu=view_menu)
 
         help_menu = tk.Menu(menubar, tearoff=False, name='help')
         help_menu.add_command(label='How to Use', command=self._show_help)
@@ -179,16 +190,21 @@ class CompareApp:
         def button(text, cmd):
             return tk.Button(frm, text=text, command=cmd, highlightthickness=0)
 
+        self._frm = frm
+        self.old_entry = entry(self.old_path)
+        self.new_entry = entry(self.new_path)
+        self.out_entry = entry(self.output_path)
+
         label('Old project:').grid(row=0, column=0, sticky='w', **pad)
-        entry(self.old_path).grid(row=0, column=1, sticky='ew', **pad)
-        button('Browse…', lambda: self._pick_file(self.old_path)).grid(row=0, column=2, columnspan=2, sticky='ew', **pad)
+        self.old_entry.grid(row=0, column=1, sticky='ew', **pad)
+        button('Browse…', lambda: self._pick_file(self.old_path, self.old_entry)).grid(row=0, column=2, columnspan=2, sticky='ew', **pad)
 
         label('New project:').grid(row=1, column=0, sticky='w', **pad)
-        entry(self.new_path).grid(row=1, column=1, sticky='ew', **pad)
-        button('Browse…', lambda: self._pick_file(self.new_path)).grid(row=1, column=2, columnspan=2, sticky='ew', **pad)
+        self.new_entry.grid(row=1, column=1, sticky='ew', **pad)
+        button('Browse…', lambda: self._pick_file(self.new_path, self.new_entry)).grid(row=1, column=2, columnspan=2, sticky='ew', **pad)
 
         label('Output HTML:').grid(row=2, column=0, sticky='w', **pad)
-        entry(self.output_path).grid(row=2, column=1, sticky='ew', **pad)
+        self.out_entry.grid(row=2, column=1, sticky='ew', **pad)
         button('Save as…', self._pick_output).grid(row=2, column=2, columnspan=2, sticky='ew', **pad)
 
         tk.Checkbutton(
@@ -203,24 +219,65 @@ class CompareApp:
         )
         self.compare_btn.grid(row=3, column=2, columnspan=2, sticky='ew', **pad)
 
-        label('Log:').grid(row=4, column=0, sticky='nw', **pad)
-        self.log_box = ScrolledText(frm, height=14, wrap='word', state=DISABLED, bd=1, relief='solid')
-        self.log_box.grid(row=4, column=1, columnspan=3, sticky='nsew', **pad)
-
-        frm.columnconfigure(1, weight=1)
-        frm.rowconfigure(4, weight=1)
+        # Status line — wraps so the full output path is always visible, and
+        # carries run progress/results now that the log is hidden by default.
+        self.status_label = tk.Label(frm, text='', bg=bg, anchor='w', justify='left',
+                                     wraplength=660)
+        self.status_label.grid(row=4, column=0, columnspan=4, sticky='w', padx=8, pady=(2, 2))
 
         # Filled by a background update check (notify-only; see _check_updates).
         self.update_label = tk.Label(frm, text='', bg=bg, fg='#3f51b5', anchor='w', cursor='hand2')
-        self.update_label.grid(row=5, column=1, columnspan=3, sticky='w', padx=8, pady=(0, 6))
+        self.update_label.grid(row=5, column=0, columnspan=4, sticky='w', padx=8, pady=(0, 6))
 
-    def _pick_file(self, target: StringVar) -> None:
+        # Log pane — hidden by default; toggled via View ▸ Show Log.
+        self._log_row = 6
+        self.log_label = label('Log:')
+        self.log_label.grid(row=self._log_row, column=0, sticky='nw', **pad)
+        self.log_box = ScrolledText(frm, height=14, wrap='word', state=DISABLED, bd=1, relief='solid')
+        self.log_box.grid(row=self._log_row, column=1, columnspan=3, sticky='nsew', **pad)
+
+        frm.columnconfigure(1, weight=1)
+
+        # Apply the initial (hidden) log state and seed the status line with the
+        # full destination; keep the status in sync when the output path changes.
+        self._apply_log_visibility()
+        self.output_path.trace_add('write', lambda *a: self._update_status_idle())
+        self._update_status_idle()
+
+    def _apply_log_visibility(self) -> None:
+        """Show or hide the log pane (View ▸ Show Log) and resize the window."""
+        if self.show_log.get():
+            self.log_label.grid()
+            self.log_box.grid()
+            self._frm.rowconfigure(self._log_row, weight=1)
+            self.root.geometry(self._geom_with_log)
+        else:
+            self.log_label.grid_remove()
+            self.log_box.grid_remove()
+            self._frm.rowconfigure(self._log_row, weight=0)
+            self.root.geometry(self._geom_compact)
+
+    def _set_status(self, text: str, color: str = '#444') -> None:
+        self.status_label.configure(text=text, fg=color)
+
+    def _update_status_idle(self) -> None:
+        """When not mid-comparison, show where the report will be saved (full,
+        resolved path), wrapped so the whole thing is visible."""
+        if self._busy:
+            return
+        raw = self.output_path.get().strip()
+        full = str(resolve_output_path(raw)) if resolve_output_path else (raw or 'dw_comparison.html')
+        self._set_status('Report will be saved to:  ' + full, '#444')
+
+    def _pick_file(self, target: StringVar, entry_widget=None) -> None:
         path = filedialog.askopenfilename(
             title='Select project file',
             filetypes=PROJX_FILETYPES,
         )
         if path:
             target.set(path)
+            if entry_widget is not None:
+                entry_widget.xview_moveto(1.0)  # show the filename end, not the start
 
     def _pick_output(self) -> None:
         current = Path(self.output_path.get().strip() or 'dw_comparison.html')
@@ -234,6 +291,7 @@ class CompareApp:
         )
         if path:
             self.output_path.set(path)
+            self.out_entry.xview_moveto(1.0)
 
     def _log(self, msg: str) -> None:
         self.log_box.configure(state=NORMAL)
@@ -275,11 +333,13 @@ class CompareApp:
         output = resolve_output_path(out_raw) if resolve_output_path else Path(out_raw or 'dw_comparison.html')
         open_browser = self.open_in_browser.get()
 
-        # Clear log and disable button
+        # Clear log, disable button, show progress in the status line.
         self.log_box.configure(state=NORMAL)
         self.log_box.delete('1.0', END)
         self.log_box.configure(state=DISABLED)
         self.compare_btn.configure(state=DISABLED, text='Comparing…')
+        self._busy = True
+        self._set_status('⏳ Comparing…', '#3f51b5')
 
         self._worker = threading.Thread(
             target=self._run_compare,
@@ -292,6 +352,8 @@ class CompareApp:
         writer = _QueueWriter(self._log_queue)
         prev_stdout = sys.stdout
         sys.stdout = writer
+        saved = None
+        error = None
         try:
             old_name = old.stem if old.suffix.lower() == '.driveprojx' else old.name
             new_name = new.stem if new.suffix.lower() == '.driveprojx' else new.name
@@ -314,23 +376,39 @@ class CompareApp:
             html = generate_html_report(old_proj, new_proj, old_name, new_name)
 
             output.write_text(html, encoding='utf-8')
-            print(f'Report saved to: {output.resolve()}')
+            saved = str(output.resolve())
+            print(f'Report saved to: {saved}')
 
             if open_browser:
                 # as_uri() keeps the file:// URL well-formed on Windows and
                 # percent-encodes spaces.
                 webbrowser.open(output.resolve().as_uri())
         except Exception as e:
-            print('\nERROR: ' + str(e))
+            error = str(e)
+            print('\nERROR: ' + error)
             print(traceback.format_exc())
         finally:
             sys.stdout = prev_stdout
             if cleanup_temp_dirs:
                 cleanup_temp_dirs()  # remove .driveprojx extractions from this run
-            self.root.after(0, self._on_done)
+            self.root.after(0, lambda: self._on_done(saved=saved, error=error))
 
-    def _on_done(self) -> None:
+    def _on_done(self, saved: str | None = None, error: str | None = None) -> None:
+        self._busy = False
         self.compare_btn.configure(state=NORMAL, text='Compare')
+        if error:
+            # The traceback is in the (possibly hidden) log; make sure the user
+            # can't miss the failure itself.
+            self._set_status('⚠ Comparison failed — open View ▸ Show Log for details', '#c0392b')
+            messagebox.showerror(
+                'Comparison failed',
+                error + '\n\nOpen View ▸ Show Log for the full details.',
+            )
+        elif saved:
+            note = ' — opened in browser' if self.open_in_browser.get() else ''
+            self._set_status('✅ Report saved to:  ' + saved + note, '#1b7a3d')
+        else:
+            self._update_status_idle()
 
     def _check_updates(self) -> None:
         """Free, fail-silent update check; runs off the UI thread on launch."""
