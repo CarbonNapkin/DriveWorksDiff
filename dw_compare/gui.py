@@ -23,10 +23,11 @@ from .report import generate_html_report
 from .update_check import check_for_update, RELEASES_PAGE
 
 try:
-    from .__main__ import resolve_input, cleanup_temp_dirs
+    from .__main__ import resolve_input, cleanup_temp_dirs, resolve_output_path
 except ImportError:
     resolve_input = None  # type: ignore
     cleanup_temp_dirs = None  # type: ignore
+    resolve_output_path = None  # type: ignore
 
 
 PROJX_FILETYPES = [('DriveWorks project', '*.driveprojx'), ('All files', '*.*')]
@@ -57,7 +58,12 @@ class CompareApp:
 
         self.old_path = StringVar()
         self.new_path = StringVar()
-        self.output_path = StringVar(value='dw_comparison.html')
+        # Default to an absolute path in a writable folder (Desktop/home), shown
+        # in full so the user knows where the report lands. A relative default
+        # would resolve against cwd, which is '/' (read-only) for a
+        # Finder-launched .app.
+        default_out = str(resolve_output_path('')) if resolve_output_path else 'dw_comparison.html'
+        self.output_path = StringVar(value=default_out)
         self.open_in_browser = BooleanVar(value=True)
 
         self._log_queue: queue.Queue[str] = queue.Queue()
@@ -189,10 +195,12 @@ class CompareApp:
             target.set(path)
 
     def _pick_output(self) -> None:
+        current = Path(self.output_path.get().strip() or 'dw_comparison.html')
         path = filedialog.asksaveasfilename(
             title='Save report as',
             defaultextension='.html',
-            initialfile=self.output_path.get() or 'dw_comparison.html',
+            initialdir=str(current.parent) if current.is_absolute() else '',
+            initialfile=current.name,
             filetypes=[('HTML', '*.html'), ('All files', '*.*')],
         )
         if path:
@@ -218,7 +226,7 @@ class CompareApp:
 
         old_raw = self.old_path.get().strip()
         new_raw = self.new_path.get().strip()
-        out_raw = self.output_path.get().strip() or 'dw_comparison.html'
+        out_raw = self.output_path.get().strip()
 
         if not old_raw or not new_raw:
             messagebox.showwarning('Missing input', 'Pick both an old and a new project.')
@@ -233,7 +241,9 @@ class CompareApp:
             messagebox.showerror('Not found', f'New project not found:\n{new}')
             return
 
-        output = Path(out_raw)
+        # Anchor a bare/relative filename to a writable folder so a
+        # Finder-launched app (cwd='/') can't fail with a read-only error.
+        output = resolve_output_path(out_raw) if resolve_output_path else Path(out_raw or 'dw_comparison.html')
         open_browser = self.open_in_browser.get()
 
         # Clear log and disable button

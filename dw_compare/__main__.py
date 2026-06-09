@@ -66,6 +66,29 @@ def resolve_input(path: Path) -> Path:
         return path  # Let validation catch invalid paths
 
 
+def _default_output_dir() -> Path:
+    """A writable, discoverable directory for the GUI's default report path.
+    Prefers the Desktop, falls back to the home folder."""
+    desktop = Path.home() / 'Desktop'
+    return desktop if desktop.is_dir() else Path.home()
+
+
+def resolve_output_path(raw: str) -> Path:
+    """Resolve a GUI output path to an absolute location in a writable folder.
+
+    A bare filename (or empty input) must NOT resolve against the process cwd:
+    when the packaged app is launched from Finder, cwd is '/' (read-only), so
+    writing 'dw_comparison.html' there fails with 'Read-only file system'.
+    Relative paths are anchored under the Desktop/home instead; absolute paths
+    (e.g. chosen via the Save dialog) are used as-is.
+    """
+    raw = (raw or '').strip()
+    p = Path(raw) if raw else Path('dw_comparison.html')
+    if not p.is_absolute():
+        p = _default_output_dir() / p
+    return p
+
+
 EXCLUDED_DIRS = {
     'dw_compare', '__pycache__', 'node_modules',
     'dist', 'build', 'venv', '.venv', 'env',

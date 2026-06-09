@@ -4,6 +4,18 @@ All notable changes to DriveWorks Project Compare are documented in this file.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **The GUI no longer crashes with "Read-only file system" when launched from a
+  double-clicked app.** The default report path was the *relative*
+  `dw_comparison.html`, which resolved against the process working directory —
+  `/` for a Finder-launched `.app` — so clicking Compare with the default output
+  failed. The default is now an absolute path in your Desktop (or home) folder,
+  shown in full, and any bare filename you enter is anchored there rather than
+  the working directory.
+
 ## [1.0.3] - 2026-06-09
 
 ### Fixed

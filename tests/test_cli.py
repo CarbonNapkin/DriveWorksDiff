@@ -79,6 +79,32 @@ def test_extract_driveprojx_rejects_zip_slip(tmp_path):  # security regression
         cli.cleanup_temp_dirs()
 
 
+def test_resolve_output_path_relative_anchors_to_writable_dir(tmp_path, monkeypatch):
+    # REGRESSION: a Finder-launched .app runs with cwd='/' (read-only). A bare
+    # filename must resolve to a writable folder, NOT the cwd.
+    monkeypatch.setenv("HOME", str(tmp_path))  # no Desktop -> falls back to home
+    p = cli.resolve_output_path("dw_comparison.html")
+    assert p.is_absolute()
+    assert p == tmp_path / "dw_comparison.html"
+
+
+def test_resolve_output_path_empty_uses_default_name(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert cli.resolve_output_path("") == tmp_path / "dw_comparison.html"
+    assert cli.resolve_output_path("   ") == tmp_path / "dw_comparison.html"
+
+
+def test_resolve_output_path_prefers_desktop(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    (tmp_path / "Desktop").mkdir()
+    assert cli.resolve_output_path("r.html") == tmp_path / "Desktop" / "r.html"
+
+
+def test_resolve_output_path_absolute_is_kept(tmp_path):
+    target = tmp_path / "reports" / "out.html"
+    assert cli.resolve_output_path(str(target)) == target
+
+
 def test_cleanup_temp_dirs_drains_the_list(tmp_path, monkeypatch):  # REGRESSION
     d = tmp_path / "extracted"
     d.mkdir()
