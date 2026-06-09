@@ -30,7 +30,7 @@ except ImportError:
     resolve_output_path = None  # type: ignore
 
 
-PROJX_FILETYPES = [('DriveWorks project', '*.driveprojx'), ('All files', '*.*')]
+PROJX_FILETYPES = [('DriveWorks project', '*.driveprojx')]
 APP_TITLE = f'DriveWorks Project Compare {__version__}'
 
 
