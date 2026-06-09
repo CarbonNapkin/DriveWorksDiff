@@ -4,7 +4,7 @@ All notable changes to DriveWorks Project Compare are documented in this file.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.0.6] - 2026-06-09
 
 ### Changed
 
@@ -191,6 +191,7 @@ self-contained HTML diff report.
 - Self-contained HTML output suitable for sharing by email or hosting on
   an internal share.
 
+[1.0.6]: https://github.com/CarbonNapkin/DriveWorksDiff/releases/tag/v1.0.6
 [1.0.5]: https://github.com/CarbonNapkin/DriveWorksDiff/releases/tag/v1.0.5
 [1.0.4]: https://github.com/CarbonNapkin/DriveWorksDiff/releases/tag/v1.0.4
 [1.0.3]: https://github.com/CarbonNapkin/DriveWorksDiff/releases/tag/v1.0.3
