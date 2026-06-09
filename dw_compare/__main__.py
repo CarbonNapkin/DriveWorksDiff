@@ -68,18 +68,20 @@ def resolve_input(path: Path) -> Path:
 
 def _default_output_dir() -> Path:
     """A writable, discoverable directory for the GUI's default report path.
-    Prefers the Desktop, falls back to the home folder."""
-    desktop = Path.home() / 'Desktop'
-    return desktop if desktop.is_dir() else Path.home()
+    Prefers the Downloads folder, falls back to the home folder. (Both exist by
+    default on macOS and Windows.)"""
+    downloads = Path.home() / 'Downloads'
+    return downloads if downloads.is_dir() else Path.home()
 
 
 def resolve_output_path(raw: str) -> Path:
     """Resolve a GUI output path to an absolute location in a writable folder.
 
     A bare filename (or empty input) must NOT resolve against the process cwd:
-    when the packaged app is launched from Finder, cwd is '/' (read-only), so
-    writing 'dw_comparison.html' there fails with 'Read-only file system'.
-    Relative paths are anchored under the Desktop/home instead; absolute paths
+    a double-clicked packaged app launches with a cwd that may be read-only
+    ('/' on macOS via Finder; C:\\Windows\\System32 or Program Files on Windows),
+    so writing 'dw_comparison.html' there fails with 'Read-only file system'.
+    Relative paths are anchored under Downloads/home instead; absolute paths
     (e.g. chosen via the Save dialog) are used as-is.
     """
     raw = (raw or '').strip()

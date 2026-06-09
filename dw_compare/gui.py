@@ -58,10 +58,10 @@ class CompareApp:
 
         self.old_path = StringVar()
         self.new_path = StringVar()
-        # Default to an absolute path in a writable folder (Desktop/home), shown
-        # in full so the user knows where the report lands. A relative default
-        # would resolve against cwd, which is '/' (read-only) for a
-        # Finder-launched .app.
+        # Default to an absolute path in a writable folder (Downloads/home),
+        # shown in full so the user knows where the report lands. A relative
+        # default would resolve against cwd, which can be read-only for a
+        # double-clicked app ('/' on macOS, System32/Program Files on Windows).
         default_out = str(resolve_output_path('')) if resolve_output_path else 'dw_comparison.html'
         self.output_path = StringVar(value=default_out)
         self.open_in_browser = BooleanVar(value=True)
@@ -242,7 +242,7 @@ class CompareApp:
             return
 
         # Anchor a bare/relative filename to a writable folder so a
-        # Finder-launched app (cwd='/') can't fail with a read-only error.
+        # double-clicked app (read-only cwd) can't fail with a read-only error.
         output = resolve_output_path(out_raw) if resolve_output_path else Path(out_raw or 'dw_comparison.html')
         open_browser = self.open_in_browser.get()
 

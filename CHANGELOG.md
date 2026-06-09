@@ -4,17 +4,18 @@ All notable changes to DriveWorks Project Compare are documented in this file.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.0.4] - 2026-06-09
 
 ### Fixed
 
 - **The GUI no longer crashes with "Read-only file system" when launched from a
-  double-clicked app.** The default report path was the *relative*
-  `dw_comparison.html`, which resolved against the process working directory —
-  `/` for a Finder-launched `.app` — so clicking Compare with the default output
-  failed. The default is now an absolute path in your Desktop (or home) folder,
-  shown in full, and any bare filename you enter is anchored there rather than
-  the working directory.
+  double-clicked app** (macOS and Windows). The default report path was the
+  *relative* `dw_comparison.html`, which resolved against the process working
+  directory — which can be read-only for a double-clicked app (`/` on macOS via
+  Finder; `C:\Windows\System32` or `Program Files` on Windows) — so clicking
+  Compare with the default output failed. The default is now an absolute path in
+  your **Downloads** (or home) folder, shown in full, and any bare filename you
+  enter is anchored there rather than the working directory.
 
 ## [1.0.3] - 2026-06-09
 
@@ -157,6 +158,7 @@ self-contained HTML diff report.
 - Self-contained HTML output suitable for sharing by email or hosting on
   an internal share.
 
+[1.0.4]: https://github.com/CarbonNapkin/DriveWorksDiff/releases/tag/v1.0.4
 [1.0.3]: https://github.com/CarbonNapkin/DriveWorksDiff/releases/tag/v1.0.3
 [1.0.2]: https://github.com/CarbonNapkin/DriveWorksDiff/releases/tag/v1.0.2
 [1.0.1]: https://github.com/CarbonNapkin/DriveWorksDiff/releases/tag/v1.0.1
