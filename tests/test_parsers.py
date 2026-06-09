@@ -1,8 +1,11 @@
 """Tests for the XML parsers: a small project parses into the expected models,
 and malformed input degrades gracefully instead of crashing."""
 
+import xml.etree.ElementTree as ET
+
 from dw_compare.parsers import (
     parse_project_xml, parse_design_master, parse_component_tasks, load_project,
+    _read_form_property,
 )
 
 PROJECT_XML = '''<?xml version="1.0" encoding="utf-8"?>
@@ -173,3 +176,32 @@ def test_spec_macro_property_binding_formula_parsing(tmp_path):
     assert t.task_type == "SkipToFormTask"          # .NET assembly qualifier stripped
     assert t.properties["FormName"] == '="MainForm"'  # nested Property->Binding->Formula
     assert t.properties["Condition"] == "=True"
+
+
+# --- Form property shapes. Real data has rule-driven props that store only a
+# cached <Value> (no <Rule>) under IsStatic="False", and the parser must let a
+# <Rule> win when both are present. ---
+
+def test_read_form_property_cached_value_under_nonstatic():
+    el = ET.fromstring('<Visible IsStatic="False"><Value>True</Value></Visible>')
+    assert _read_form_property(el) == (False, "True")
+
+def test_read_form_property_rule_wins_over_value():
+    el = ET.fromstring('<Items IsStatic="False"><Value>cached</Value><Rule>=Length&gt;5</Rule></Items>')
+    assert _read_form_property(el) == (False, "=Length>5")
+
+def test_read_form_property_defaults_to_static():
+    el = ET.fromstring('<Caption><Value>Width</Value></Caption>')  # no IsStatic attr
+    assert _read_form_property(el) == (True, "Width")
+
+
+def test_load_project_discovers_files_in_nested_subfolder(tmp_path):
+    # Run-specification layout: the project files live under a nested
+    # ".../<spec>/DriveWorksFiles/" folder, which load_project finds via rglob.
+    spec = tmp_path / "Order 0042" / "DriveWorksFiles"
+    spec.mkdir(parents=True)
+    (spec / "project.xml").write_text(MACRO_PROJECT_XML, encoding="utf-8")
+    (spec / "designMaster.xml").write_text(TDM_DESIGN_XML, encoding="utf-8")
+    proj = load_project(tmp_path)
+    assert "Width" in proj.variables       # found in the nested designMaster
+    assert "GoToForm" in proj.spec_macros  # found in the nested project.xml

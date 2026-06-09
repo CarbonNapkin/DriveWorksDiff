@@ -127,6 +127,25 @@ def test_calc_table_row_count_change_is_modified():  # REGRESSION (row_count not
     assert stats["modified"] == 1
     assert "row count" in html
 
+def test_calc_table_common_rule_change_no_row_rules():
+    # The dominant real shape: a column with a common rule and NO row-specific
+    # rules (row_count set, rows={}). A change to the common rule is modified
+    # and renders as a "Common"-scope token-level diff.
+    old = {"T": CalcTable("T", row_count=20, columns={"C": {"common": "=A*1", "rows": {}}})}
+    new = {"T": CalcTable("T", row_count=20, columns={"C": {"common": "=A*2", "rows": {}}})}
+    html, stats = compare_calc_tables(old, new)
+    assert stats["modified"] == 1
+    assert "Common" in html
+    assert '<span class="removed">1</span>' in html
+    assert '<span class="added">2</span>' in html
+
+def test_calc_table_identical_is_unchanged():
+    cols = {"C": {"common": "=A*1", "rows": {0: "=B"}}}
+    old = {"T": CalcTable("T", row_count=20, columns=cols)}
+    new = {"T": CalcTable("T", row_count=20, columns={"C": {"common": "=A*1", "rows": {0: "=B"}}})}
+    _, stats = compare_calc_tables(old, new)
+    assert stats == {"added": 0, "removed": 0, "modified": 0, "unchanged": 1}
+
 
 # ---------- nav steps ----------
 
