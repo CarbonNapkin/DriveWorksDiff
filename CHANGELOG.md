@@ -4,6 +4,27 @@ All notable changes to DriveWorks Project Compare are documented in this file.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **The app's version metadata now matches the running app.** The build read the
+  version by scanning `__init__.py`, which only re-exports it, so the macOS
+  bundle's version silently fell back to a default (Get Info showed `1.0.0`
+  while About showed the real version). The build now reads `_version.py`, and
+  the Windows `.exe` gets a proper version resource in its file properties too.
+
+### Changed
+
+- The project picker only accepts `.driveprojx` files. The **Folder…** option
+  was removed (DriveWorks projects are stored as `.driveprojx`, not loose
+  folders), and the file dialog shows a single `DriveWorks project (*.driveprojx)`
+  filter with no "All files" fallback.
+- **Help → How to Use** now opens concise in-app usage instructions instead of
+  launching the GitHub repository in a browser.
+- The "Save report as…" dialog no longer shows a file-type chooser; the report
+  is always HTML and keeps the `.html` extension.
+
 ## [1.0.4] - 2026-06-09
 
 ### Fixed

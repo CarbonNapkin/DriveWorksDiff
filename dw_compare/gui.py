@@ -85,15 +85,50 @@ class CompareApp:
         menubar.add_cascade(label='File', menu=file_menu)
 
         help_menu = tk.Menu(menubar, tearoff=False, name='help')
-        help_menu.add_command(label='Open Documentation', command=self._open_docs)
+        help_menu.add_command(label='How to Use', command=self._show_help)
         help_menu.add_separator()
         help_menu.add_command(label='About DriveWorks Project Compare', command=self._show_about)
         menubar.add_cascade(label='Help', menu=help_menu)
 
         self.root.config(menu=menubar)
 
-    def _open_docs(self) -> None:
-        webbrowser.open(__url__)
+    def _show_help(self) -> None:
+        """Concise in-app usage help, so the menu offers real guidance rather
+        than just opening a code repository in the browser."""
+        top = tk.Toplevel(self.root)
+        top.title('How to Use')
+        top.resizable(False, False)
+        bg = '#f4f4f4'
+        top.configure(bg=bg)
+
+        steps = (
+            "Compare two DriveWorks projects into one shareable HTML report.\n\n"
+            "1.  Old project — click Browse… and pick the baseline .driveprojx.\n"
+            "2.  New project — click Browse… and pick the version to compare.\n"
+            "3.  Output — defaults to your Downloads folder; change it with\n"
+            "      Save as… if you like.\n"
+            "4.  Click Compare. The report opens in your browser when it finishes.\n\n"
+            "The report groups every change (added / removed / modified) by\n"
+            "section — variables, tables, component tasks, documents, macros,\n"
+            "navigation, and form rules — with search and status filters on top.\n\n"
+            "Everything runs locally; your project files never leave your computer."
+        )
+        tk.Label(top, text='How to Use DriveWorks Project Compare', bg=bg,
+                 font=('TkDefaultFont', 14, 'bold')).pack(padx=16, pady=(14, 6), anchor='w')
+        tk.Label(top, text=steps, bg=bg, justify='left', anchor='w').pack(padx=16, pady=(0, 8), anchor='w')
+
+        link = tk.Label(top, text='More at ' + __url__, bg=bg, fg='#3f51b5', cursor='hand2')
+        link.pack(padx=16, pady=(0, 4), anchor='w')
+        link.bind('<Button-1>', lambda _e: webbrowser.open(__url__))
+
+        tk.Button(top, text='Close', command=top.destroy).pack(pady=(8, 12))
+
+        top.update_idletasks()
+        x = self.root.winfo_rootx() + (self.root.winfo_width() - top.winfo_width()) // 2
+        y = self.root.winfo_rooty() + (self.root.winfo_height() - top.winfo_height()) // 3
+        top.geometry(f'+{max(0, x)}+{max(0, y)}')
+        top.transient(self.root)
+        top.grab_set()
 
     def _show_about(self) -> None:
         """Custom About window. messagebox.showinfo works but a Toplevel
@@ -146,13 +181,11 @@ class CompareApp:
 
         label('Old project:').grid(row=0, column=0, sticky='w', **pad)
         entry(self.old_path).grid(row=0, column=1, sticky='ew', **pad)
-        button('File…', lambda: self._pick_file(self.old_path)).grid(row=0, column=2, **pad)
-        button('Folder…', lambda: self._pick_folder(self.old_path)).grid(row=0, column=3, **pad)
+        button('Browse…', lambda: self._pick_file(self.old_path)).grid(row=0, column=2, columnspan=2, sticky='ew', **pad)
 
         label('New project:').grid(row=1, column=0, sticky='w', **pad)
         entry(self.new_path).grid(row=1, column=1, sticky='ew', **pad)
-        button('File…', lambda: self._pick_file(self.new_path)).grid(row=1, column=2, **pad)
-        button('Folder…', lambda: self._pick_folder(self.new_path)).grid(row=1, column=3, **pad)
+        button('Browse…', lambda: self._pick_file(self.new_path)).grid(row=1, column=2, columnspan=2, sticky='ew', **pad)
 
         label('Output HTML:').grid(row=2, column=0, sticky='w', **pad)
         entry(self.output_path).grid(row=2, column=1, sticky='ew', **pad)
@@ -189,19 +222,15 @@ class CompareApp:
         if path:
             target.set(path)
 
-    def _pick_folder(self, target: StringVar) -> None:
-        path = filedialog.askdirectory(title='Select project folder')
-        if path:
-            target.set(path)
-
     def _pick_output(self) -> None:
         current = Path(self.output_path.get().strip() or 'dw_comparison.html')
+        # The report is always HTML, so no file-type chooser is shown; the
+        # default extension keeps the .html suffix.
         path = filedialog.asksaveasfilename(
             title='Save report as',
             defaultextension='.html',
             initialdir=str(current.parent) if current.is_absolute() else '',
             initialfile=current.name,
-            filetypes=[('HTML', '*.html'), ('All files', '*.*')],
         )
         if path:
             self.output_path.set(path)

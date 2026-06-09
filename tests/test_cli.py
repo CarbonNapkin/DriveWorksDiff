@@ -105,6 +105,21 @@ def test_resolve_output_path_absolute_is_kept(tmp_path):
     assert cli.resolve_output_path(str(target)) == target
 
 
+def test_build_version_source_is_line_scannable():
+    # REGRESSION: the PyInstaller spec stamps the build version by line-scanning
+    # dw_compare/_version.py for `__version__ = '...'`. If that literal moves or
+    # changes shape, the build silently falls back to the spec default and the
+    # bundle version stops matching the running app (the About-vs-build bug).
+    import dw_compare
+    vfile = Path(dw_compare.__file__).parent / "_version.py"
+    scanned = None
+    for line in vfile.read_text(encoding="utf-8").splitlines():
+        if line.strip().startswith("__version__"):
+            scanned = line.split("=", 1)[1].strip().strip("'\"")
+            break
+    assert scanned == dw_compare.__version__
+
+
 def test_cleanup_temp_dirs_drains_the_list(tmp_path, monkeypatch):  # REGRESSION
     d = tmp_path / "extracted"
     d.mkdir()
