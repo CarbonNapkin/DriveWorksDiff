@@ -23,9 +23,10 @@ from .report import generate_html_report
 from .update_check import check_for_update, RELEASES_PAGE
 
 try:
-    from .__main__ import resolve_input
+    from .__main__ import resolve_input, cleanup_temp_dirs
 except ImportError:
     resolve_input = None  # type: ignore
+    cleanup_temp_dirs = None  # type: ignore
 
 
 PROJX_FILETYPES = [('DriveWorks project', '*.driveprojx'), ('All files', '*.*')]
@@ -283,6 +284,8 @@ class CompareApp:
             print(traceback.format_exc())
         finally:
             sys.stdout = prev_stdout
+            if cleanup_temp_dirs:
+                cleanup_temp_dirs()  # remove .driveprojx extractions from this run
             self.root.after(0, self._on_done)
 
     def _on_done(self) -> None:
@@ -292,7 +295,10 @@ class CompareApp:
         """Free, fail-silent update check; runs off the UI thread on launch."""
         newer = check_for_update()
         if newer:
-            self.root.after(0, lambda: self._show_update(newer))
+            try:
+                self.root.after(0, lambda: self._show_update(newer))
+            except Exception:
+                pass  # window already closed
 
     def _show_update(self, newer: str) -> None:
         self.update_label.configure(text=f'⬆ Update available: v{newer} — click to download')

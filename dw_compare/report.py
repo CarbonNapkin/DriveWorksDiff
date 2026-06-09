@@ -2,6 +2,7 @@
 HTML report generation for DriveWorks comparison.
 """
 
+import traceback
 from datetime import datetime
 from html import escape
 
@@ -22,57 +23,40 @@ from .comparers import (
 )
 
 
-def generate_html_report(old_proj: DWProject, new_proj: DWProject, 
+def _safe(fn, *args):
+    """Run a section comparator, degrading to a placeholder instead of taking
+    down the whole report if one section hits unexpected data."""
+    try:
+        return fn(*args)
+    except Exception:
+        traceback.print_exc()
+        return ('<p class="empty">Could not render this section (see console for details).</p>',
+                {'added': 0, 'removed': 0, 'modified': 0, 'unchanged': 0})
+
+
+def generate_html_report(old_proj: DWProject, new_proj: DWProject,
                          old_name: str, new_name: str) -> str:
     """Generate comprehensive HTML comparison report"""
-    
-    sections = []
+
     summary = {'added': 0, 'removed': 0, 'modified': 0, 'unchanged': 0}
-    
-    # --- Variables Section ---
-    var_html, var_stats = compare_variables(old_proj.variables, new_proj.variables)
-    sections.append(('Variables', var_html, var_stats))
-    
-    # --- Constants Section ---
-    const_html, const_stats = compare_constants(old_proj.constants, new_proj.constants)
-    sections.append(('Constants', const_html, const_stats))
-    
-    # --- Special Variables Section ---
-    sv_html, sv_stats = compare_special_vars(old_proj.special_vars, new_proj.special_vars)
-    sections.append(('Special Variables', sv_html, sv_stats))
-    
-    # --- Calculation Tables Section ---
-    ct_html, ct_stats = compare_calc_tables(old_proj.calc_tables, new_proj.calc_tables)
-    sections.append(('Calculation Tables', ct_html, ct_stats))
-    
-    # --- Component Tasks Section ---
-    task_html, task_stats = compare_component_tasks(old_proj.component_tasks, new_proj.component_tasks)
-    sections.append(('Component Tasks', task_html, task_stats))
-    
-    # --- Documents Section ---
-    doc_html, doc_stats = compare_documents(old_proj.documents, new_proj.documents)
-    sections.append(('Documents', doc_html, doc_stats))
-    
-    # --- Lookup Tables Section ---
-    lt_html, lt_stats = compare_lookup_tables(old_proj.lookup_tables, new_proj.lookup_tables)
-    sections.append(('Lookup Tables', lt_html, lt_stats))
+    section_defs = [
+        ('Variables', compare_variables, old_proj.variables, new_proj.variables),
+        ('Constants', compare_constants, old_proj.constants, new_proj.constants),
+        ('Special Variables', compare_special_vars, old_proj.special_vars, new_proj.special_vars),
+        ('Calculation Tables', compare_calc_tables, old_proj.calc_tables, new_proj.calc_tables),
+        ('Component Tasks', compare_component_tasks, old_proj.component_tasks, new_proj.component_tasks),
+        ('Documents', compare_documents, old_proj.documents, new_proj.documents),
+        ('Lookup Tables', compare_lookup_tables, old_proj.lookup_tables, new_proj.lookup_tables),
+        ('Data Tables', compare_data_tables, old_proj.data_tables, new_proj.data_tables),
+        ('Specification Macros', compare_spec_macros, old_proj.spec_macros, new_proj.spec_macros),
+        ('Navigation Steps', compare_nav_steps, old_proj.nav_steps, new_proj.nav_steps),
+        ('Forms', compare_forms, old_proj.forms, new_proj.forms),
+    ]
+    sections = []
+    for _title, _fn, _old, _new in section_defs:
+        _html, _stats = _safe(_fn, _old, _new)
+        sections.append((_title, _html, _stats))
 
-    # --- Data Tables Section ---
-    dt_html, dt_stats = compare_data_tables(old_proj.data_tables, new_proj.data_tables)
-    sections.append(('Data Tables', dt_html, dt_stats))
-
-    # --- Specification Macros Section ---
-    macro_html, macro_stats = compare_spec_macros(old_proj.spec_macros, new_proj.spec_macros)
-    sections.append(('Specification Macros', macro_html, macro_stats))
-
-    # --- Navigation Steps Section ---
-    nav_html, nav_stats = compare_nav_steps(old_proj.nav_steps, new_proj.nav_steps)
-    sections.append(('Navigation Steps', nav_html, nav_stats))
-
-    # --- Forms Section ---
-    form_html, form_stats = compare_forms(old_proj.forms, new_proj.forms)
-    sections.append(('Forms', form_html, form_stats))
-    
     # Aggregate summary
     for _, _, stats in sections:
         summary['added'] += stats['added']
@@ -360,6 +344,7 @@ def generate_html_report(old_proj: DWProject, new_proj: DWProject,
         }}
 
         .empty {{ color: #888; font-style: italic; }}
+        .attr-note {{ color: #888; font-size: 11px; margin-top: 3px; }}
         .toggle {{ font-size: 18px; user-select: none; }}
     </style>
 </head>

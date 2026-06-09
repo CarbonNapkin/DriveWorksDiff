@@ -29,9 +29,14 @@ def extract_driveprojx(file_path: Path) -> Path:
     _temp_dirs.append(temp_dir)
     
     print(f"  Extracting {file_path.name}...")
+    base = Path(temp_dir).resolve()
     with zipfile.ZipFile(file_path, 'r') as zf:
+        for member in zf.namelist():
+            dest = (base / member).resolve()
+            if dest != base and not dest.is_relative_to(base):
+                raise ValueError(f"Unsafe path in archive (zip slip): {member}")
         zf.extractall(temp_dir)
-    
+
     return Path(temp_dir)
 
 

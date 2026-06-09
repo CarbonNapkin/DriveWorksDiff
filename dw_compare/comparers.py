@@ -60,44 +60,82 @@ def compare_dicts(old: dict, new: dict) -> tuple[set, set, set]:
     added = new_keys - old_keys
     removed = old_keys - new_keys
     common = old_keys & new_keys
-    
+
     return added, removed, common
 
 
+def _diff_rule_dicts(old_rules: dict, new_rules: dict) -> list:
+    """Return [(rule_name, status, old_formula, new_formula)] for rules that
+    differ between two {name: formula} dicts."""
+    out = []
+    for k in sorted(set(old_rules) | set(new_rules)):
+        o, n = old_rules.get(k), new_rules.get(k)
+        if o == n:
+            continue
+        if k not in old_rules:
+            out.append((k, 'added', '', n))
+        elif k not in new_rules:
+            out.append((k, 'removed', o, ''))
+        else:
+            out.append((k, 'modified', o, n))
+    return out
+
+
+def _attr_notes(pairs: list) -> str:
+    """Muted sub-notes for secondary attribute changes (e.g. store name,
+    comment). `pairs` is [(label, old, new)]; only changed pairs render."""
+    out = []
+    for label, o, n in pairs:
+        o, n = o or '', n or ''
+        if o != n:
+            out.append(f'<div class="attr-note">{escape(label)}: {inline_diff(o, n)}</div>')
+    return ''.join(out)
+
+
 def compare_variables(old: dict, new: dict) -> tuple[str, dict]:
-    """Compare variables and generate HTML"""
+    """Compare variables. Shows the resolved Category and the formula, plus any
+    store-name / comment change as muted sub-notes. A variable counts as
+    modified if its formula, category, store name, or comment changed."""
     added, removed, common = compare_dicts(old, new)
     stats = {'added': len(added), 'removed': len(removed), 'modified': 0, 'unchanged': 0}
-    
     rows = []
-    
+
+    def cat(v):
+        return escape(v.category) if v.category else ''
+
     for name in sorted(added):
         v = new[name]
-        rows.append(f'<tr class="added"><td>{escape(name)}</td><td><span class="badge badge-added">Added</span></td>'
-                   f'<td class="formula">{escape(v.formula)}</td></tr>')
-    
+        rows.append(f'<tr class="added"><td>{escape(name)}</td><td>{cat(v)}</td>'
+                    f'<td><span class="badge badge-added">Added</span></td>'
+                    f'<td class="formula">{escape(v.formula)}</td></tr>')
+
     for name in sorted(removed):
         v = old[name]
-        rows.append(f'<tr class="removed"><td>{escape(name)}</td><td><span class="badge badge-removed">Removed</span></td>'
-                   f'<td class="formula">{escape(v.formula)}</td></tr>')
-    
+        rows.append(f'<tr class="removed"><td>{escape(name)}</td><td>{cat(v)}</td>'
+                    f'<td><span class="badge badge-removed">Removed</span></td>'
+                    f'<td class="formula">{escape(v.formula)}</td></tr>')
+
     for name in sorted(common):
-        old_v, new_v = old[name], new[name]
-        if old_v.formula != new_v.formula:
+        o, n = old[name], new[name]
+        notes = _attr_notes([('store', o.store_name, n.store_name),
+                             ('comment', o.comment, n.comment)])
+        cat_cell = cat(n) if o.category == n.category else inline_diff(o.category, n.category)
+        if o.formula != n.formula or o.category != n.category or notes:
             stats['modified'] += 1
-            diff = inline_diff(old_v.formula, new_v.formula)
-            rows.append(f'<tr class="modified"><td>{escape(name)}</td><td><span class="badge badge-modified">Modified</span></td>'
-                       f'<td class="formula">{diff}</td></tr>')
+            formula_cell = inline_diff(o.formula, n.formula) if o.formula != n.formula else escape(n.formula)
+            rows.append(f'<tr class="modified"><td>{escape(name)}</td><td>{cat_cell}</td>'
+                        f'<td><span class="badge badge-modified">Modified</span></td>'
+                        f'<td class="formula">{formula_cell}{notes}</td></tr>')
         else:
             stats['unchanged'] += 1
-            rows.append(f'<tr class="unchanged"><td>{escape(name)}</td><td>·</td>'
-                       f'<td class="formula">{escape(old_v.formula)}</td></tr>')
-    
+            rows.append(f'<tr class="unchanged"><td>{escape(name)}</td><td>{cat(n)}</td>'
+                        f'<td>·</td><td class="formula">{escape(n.formula)}</td></tr>')
+
     html = f'''<table>
-        <thead><tr><th>Variable Name</th><th>Status</th><th>Formula</th></tr></thead>
-        <tbody>{"".join(rows) if rows else '<tr><td colspan="3" class="empty">No variables found</td></tr>'}</tbody>
+        <thead><tr><th>Variable Name</th><th>Category</th><th>Status</th><th>Formula</th></tr></thead>
+        <tbody>{"".join(rows) if rows else '<tr><td colspan="4" class="empty">No variables found</td></tr>'}</tbody>
     </table>'''
-    
+
     return html, stats
 
 
@@ -119,17 +157,19 @@ def compare_constants(old: dict, new: dict) -> tuple[str, dict]:
                    f'<td>{escape(c.value)}</td></tr>')
     
     for name in sorted(common):
-        old_c, new_c = old[name], new[name]
-        if old_c.value != new_c.value:
+        o, n = old[name], new[name]
+        notes = _attr_notes([('store', o.store_name, n.store_name),
+                             ('comment', o.comment, n.comment)])
+        if o.value != n.value or notes:
             stats['modified'] += 1
-            diff = inline_diff(old_c.value, new_c.value)
+            value_cell = inline_diff(o.value, n.value) if o.value != n.value else escape(n.value)
             rows.append(f'<tr class="modified"><td>{escape(name)}</td><td><span class="badge badge-modified">Modified</span></td>'
-                       f'<td>{diff}</td></tr>')
+                       f'<td>{value_cell}{notes}</td></tr>')
         else:
             stats['unchanged'] += 1
             rows.append(f'<tr class="unchanged"><td>{escape(name)}</td><td>·</td>'
-                       f'<td>{escape(old_c.value)}</td></tr>')
-    
+                       f'<td>{escape(n.value)}</td></tr>')
+
     html = f'''<table>
         <thead><tr><th>Constant Name</th><th>Status</th><th>Value</th></tr></thead>
         <tbody>{"".join(rows) if rows else '<tr><td colspan="3" class="empty">No constants found</td></tr>'}</tbody>
@@ -219,6 +259,10 @@ def compare_calc_tables(old: dict, new: dict) -> tuple[str, dict]:
     for name in sorted(common):
         old_tbl, new_tbl = old[name], new[name]
         rows_html = []
+        if old_tbl.row_count != new_tbl.row_count:
+            rows_html.append(_calc_row('(row count)', '', 'modified',
+                                       str(old_tbl.row_count), str(new_tbl.row_count),
+                                       first_in_group=True))
         all_cols = set(old_tbl.columns.keys()) | set(new_tbl.columns.keys())
 
         for col in sorted(all_cols):
@@ -269,84 +313,97 @@ def compare_calc_tables(old: dict, new: dict) -> tuple[str, dict]:
 
 
 def compare_component_tasks(old: dict, new: dict) -> tuple[str, dict]:
-    """Compare component tasks"""
+    """Compare component tasks, with a rule-level breakdown under each modified
+    task (which rule changed and how). Unchanged tasks are counted but not
+    listed, matching the Forms/Macros sections."""
     added, removed, common = compare_dicts(old, new)
     stats = {'added': len(added), 'removed': len(removed), 'modified': 0, 'unchanged': 0}
-    
     rows = []
-    
+
+    def head_row(t, status):
+        badge = f'<span class="badge badge-{status}">{status.title()}</span>'
+        where = escape(t.component_id or t.scope)
+        extra = f'{where} · {len(t.rules)} rules' if status != 'modified' else where
+        return (f'<tr class="{status} group-start"><td class="grouper">{escape(t.name)}</td>'
+                f'<td class="grouper">{escape(t.task_type)}</td>'
+                f'<td colspan="2">{badge}</td><td>{extra}</td></tr>')
+
     for key in sorted(added):
-        t = new[key]
-        rows.append(f'<tr class="added"><td>{escape(t.name)}</td><td>{escape(t.task_type)}</td>'
-                   f'<td><span class="badge badge-added">Added</span></td><td>{escape(t.component_id or t.scope)}</td></tr>')
-    
+        rows.append(head_row(new[key], 'added'))
     for key in sorted(removed):
-        t = old[key]
-        rows.append(f'<tr class="removed"><td>{escape(t.name)}</td><td>{escape(t.task_type)}</td>'
-                   f'<td><span class="badge badge-removed">Removed</span></td><td>{escape(t.component_id or t.scope)}</td></tr>')
-    
+        rows.append(head_row(old[key], 'removed'))
+
     for key in sorted(common):
-        old_t, new_t = old[key], new[key]
-        
-        # Compare rules
-        rule_diff = False
-        for rule_name in set(old_t.rules.keys()) | set(new_t.rules.keys()):
-            if old_t.rules.get(rule_name) != new_t.rules.get(rule_name):
-                rule_diff = True
-                break
-        
-        if rule_diff:
-            stats['modified'] += 1
-            rows.append(f'<tr class="modified"><td>{escape(old_t.name)}</td><td>{escape(old_t.task_type)}</td>'
-                       f'<td><span class="badge badge-modified">Modified</span></td><td>{escape(old_t.component_id or old_t.scope)}</td></tr>')
-        else:
+        ot, nt = old[key], new[key]
+        rule_changes = _diff_rule_dicts(ot.rules, nt.rules)
+        if not rule_changes:
             stats['unchanged'] += 1
-            rows.append(f'<tr class="unchanged"><td>{escape(old_t.name)}</td><td>{escape(old_t.task_type)}</td>'
-                       f'<td>·</td><td>{escape(old_t.component_id or old_t.scope)}</td></tr>')
-    
-    html = f'''<table>
-        <thead><tr><th>Task Name</th><th>Type</th><th>Status</th><th>Component/Scope</th></tr></thead>
-        <tbody>{"".join(rows) if rows else '<tr><td colspan="4" class="empty">No component tasks found</td></tr>'}</tbody>
-    </table>'''
-    
+            continue
+        stats['modified'] += 1
+        rows.append(head_row(nt, 'modified'))
+        for rid, status, of, nf in rule_changes:
+            badge = f'<span class="badge badge-{status}">{status.title()}</span>'
+            cell = inline_diff(of, nf) if status == 'modified' else escape(nf or of)
+            rows.append(f'<tr class="{status}"><td class="grouper"></td><td class="grouper"></td>'
+                        f'<td>{escape(rid)}</td><td>{badge}</td><td class="formula">{cell}</td></tr>')
+
+    body = "".join(rows) if rows else '<tr><td colspan="5" class="empty">No component tasks found</td></tr>'
+    html = ('<table class="grouped"><thead><tr><th>Task</th><th>Type</th><th>Rule</th>'
+            '<th>Status</th><th>Formula</th></tr></thead>'
+            f'<tbody>{body}</tbody></table>')
     return html, stats
 
 
 def compare_documents(old: dict, new: dict) -> tuple[str, dict]:
-    """Compare documents/triggered actions"""
+    """Compare documents / triggered actions with a rule-level breakdown (and a
+    type-change row) under each modified document."""
     added, removed, common = compare_dicts(old, new)
     stats = {'added': len(added), 'removed': len(removed), 'modified': 0, 'unchanged': 0}
-    
-    rows = []
-    
+    html_parts = []
+
     for name in sorted(added):
         d = new[name]
-        rows.append(f'<tr class="added"><td>{escape(name)}</td><td><span class="badge badge-added">Added</span></td>'
-                   f'<td>{len(d["rules"])} rules</td></tr>')
-    
+        html_parts.append(
+            f'<h3 class="added">➕ {escape(name)} <span class="badge badge-added">Added</span> '
+            f'<small>({escape(d["type"])}, {len(d["rules"])} rules)</small></h3>'
+        )
+
     for name in sorted(removed):
         d = old[name]
-        rows.append(f'<tr class="removed"><td>{escape(name)}</td><td><span class="badge badge-removed">Removed</span></td>'
-                   f'<td>{len(d["rules"])} rules</td></tr>')
-    
+        html_parts.append(
+            f'<h3 class="removed">➖ {escape(name)} <span class="badge badge-removed">Removed</span> '
+            f'<small>({escape(d["type"])}, {len(d["rules"])} rules)</small></h3>'
+        )
+
     for name in sorted(common):
-        old_d, new_d = old[name], new[name]
-        
-        if old_d['rules'] != new_d['rules']:
+        od, nd = old[name], new[name]
+        rows = []
+        if od['type'] != nd['type']:
+            rows.append(
+                '<tr class="modified"><td class="grouper">(type)</td>'
+                '<td><span class="badge badge-modified">Modified</span></td>'
+                f'<td class="formula">{inline_diff(od["type"], nd["type"])}</td></tr>'
+            )
+        for rid, status, of, nf in _diff_rule_dicts(od['rules'], nd['rules']):
+            badge = f'<span class="badge badge-{status}">{status.title()}</span>'
+            cell = inline_diff(of, nf) if status == 'modified' else escape(nf or of)
+            rows.append(
+                f'<tr class="{status}"><td class="grouper">{escape(rid)}</td>'
+                f'<td>{badge}</td><td class="formula">{cell}</td></tr>'
+            )
+        if rows:
             stats['modified'] += 1
-            rows.append(f'<tr class="modified"><td>{escape(name)}</td><td><span class="badge badge-modified">Modified</span></td>'
-                       f'<td>{len(new_d["rules"])} rules</td></tr>')
+            html_parts.append(
+                f'<h3 class="modified">📄 {escape(name)} <span class="badge badge-modified">Modified</span> '
+                f'<small>({escape(nd["type"])})</small></h3>'
+                '<table><thead><tr><th>Rule</th><th>Status</th><th>Formula</th></tr></thead>'
+                f'<tbody>{"".join(rows)}</tbody></table>'
+            )
         else:
             stats['unchanged'] += 1
-            rows.append(f'<tr class="unchanged"><td>{escape(name)}</td><td>·</td>'
-                       f'<td>{len(old_d["rules"])} rules</td></tr>')
-    
-    html = f'''<table>
-        <thead><tr><th>Document Name</th><th>Status</th><th>Rules</th></tr></thead>
-        <tbody>{"".join(rows) if rows else '<tr><td colspan="3" class="empty">No documents found</td></tr>'}</tbody>
-    </table>'''
-    
-    return html, stats
+
+    body = ''.join(html_parts) if html_parts else '<p class="empty">No documents found</p>'
+    return body, stats
 
 
 def _parse_csv_table(body: str) -> tuple:

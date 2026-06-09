@@ -3,7 +3,6 @@ Data models for DriveWorks project elements.
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass
@@ -21,12 +20,6 @@ class Constant:
     store_name: str = ""
     value: str = ""
     comment: str = ""
-
-
-@dataclass
-class CalcTableCell:
-    formula: str = ""
-    row_index: Optional[int] = None  # None = common rule
 
 
 @dataclass

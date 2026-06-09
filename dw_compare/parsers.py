@@ -158,7 +158,10 @@ def parse_project_xml(path: Path) -> dict:
                 row_idx = rule.get('RowIndex')
                 formula_el = rule.find('project:Formula', NS)
                 if row_idx is not None and formula_el is not None:
-                    col_data['rows'][int(row_idx)] = (formula_el.text or '').strip()
+                    try:
+                        col_data['rows'][int(row_idx)] = (formula_el.text or '').strip()
+                    except (TypeError, ValueError):
+                        pass  # ignore a malformed (non-numeric) RowIndex
             
             columns[col_name] = col_data
         
