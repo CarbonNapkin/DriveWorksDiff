@@ -4,6 +4,16 @@ All notable changes to DriveWorks Project Compare are documented in this file.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- A pytest test suite (`tests/`) covering the comparison layer, parsers, report
+  rendering, and the update check, with a regression test for every bug fixed in
+  1.0.1 and 1.0.2.
+- A **Tests** GitHub Actions workflow that runs pytest on every push and pull
+  request (Python 3.10 and 3.12); release builds now run the tests first.
+
 ## [1.0.2] - 2026-06-09
 
 ### Added

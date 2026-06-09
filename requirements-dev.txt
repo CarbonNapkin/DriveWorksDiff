@@ -1,0 +1,2 @@
+# Dev-only dependencies (the app itself needs no third-party packages).
+pytest>=7
