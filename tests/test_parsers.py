@@ -107,3 +107,69 @@ def test_load_project_end_to_end(tmp_path):
     assert "W" in proj.variables
     assert "M" in proj.constants
     assert proj.component_tasks
+
+
+# --- TDM designMaster + category resolution: the format ~100% of real projects
+# actually use (variables/categories live in the attribute-based designMaster,
+# category GUIDs resolve against project.xml). Validated on real data; locked in
+# here with synthetic fixtures so it stays covered in CI. ---
+
+CATS_PROJECT_XML = '''<?xml version="1.0" encoding="utf-8"?>
+<p:Project xmlns:p="http://schemas.driveworks.co.uk/project/">
+  <p:Categories>
+    <p:Category UniqueId="cat-guid-1" Name="Dimensions"/>
+  </p:Categories>
+</p:Project>'''
+
+TDM_DESIGN_XML = '''<?xml version="1.0" encoding="utf-8"?>
+<TDM>
+  <Variable DisplayName="Width" StoreName="DWVariableWidth" Rule="=Length+5" Category="cat-guid-1" Comment="w"/>
+  <Variable DisplayName="Depth" StoreName="DWVariableDepth" Rule="=10" Category="unknown-guid"/>
+</TDM>'''
+
+
+def test_tdm_designmaster_variable_parsing(tmp_path):
+    p = tmp_path / "designMaster.xml"
+    p.write_text(TDM_DESIGN_XML, encoding="utf-8")
+    v = parse_design_master(p)["variables"]["Width"]
+    assert v.formula == "=Length+5"           # TDM stores the rule in the Rule attribute
+    assert v.store_name == "DWVariableWidth"
+    assert v.category == "cat-guid-1"          # raw GUID at parse time
+    assert v.comment == "w"
+
+
+def test_load_project_resolves_category_guids(tmp_path):
+    (tmp_path / "project.xml").write_text(CATS_PROJECT_XML, encoding="utf-8")
+    (tmp_path / "designMaster.xml").write_text(TDM_DESIGN_XML, encoding="utf-8")
+    proj = load_project(tmp_path)
+    assert proj.variables["Width"].category == "Dimensions"     # GUID resolved to its name
+    assert proj.variables["Depth"].category == "unknown-guid"   # unmatched GUID left as-is
+
+
+MACRO_PROJECT_XML = '''<?xml version="1.0" encoding="utf-8"?>
+<p:Project xmlns:p="http://schemas.driveworks.co.uk/project/">
+  <p:SpecificationMacros>
+    <p:SpecificationMacro Name="GoToForm">
+      <Tasks>
+        <Task Title="Skip to Form" Type="DriveWorks.SkipToFormTask, DriveWorks.Engine">
+          <Properties>
+            <Property Name="FormName"><Binding><Formula>="MainForm"</Formula></Binding></Property>
+            <Property Name="Condition"><Binding><Formula>=True</Formula></Binding></Property>
+          </Properties>
+        </Task>
+      </Tasks>
+    </p:SpecificationMacro>
+  </p:SpecificationMacros>
+</p:Project>'''
+
+
+def test_spec_macro_property_binding_formula_parsing(tmp_path):
+    p = tmp_path / "project.xml"
+    p.write_text(MACRO_PROJECT_XML, encoding="utf-8")
+    m = parse_project_xml(p)["spec_macros"]["GoToForm"]
+    assert len(m.tasks) == 1
+    t = m.tasks[0]
+    assert t.title == "Skip to Form"
+    assert t.task_type == "SkipToFormTask"          # .NET assembly qualifier stripped
+    assert t.properties["FormName"] == '="MainForm"'  # nested Property->Binding->Formula
+    assert t.properties["Condition"] == "=True"

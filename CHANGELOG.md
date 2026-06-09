@@ -37,9 +37,11 @@ and the project uses [Semantic Versioning](https://semver.org/).
 - Loading a project with **multiple/nested specifications** now prints a notice
   that their contents are merged into one view (identically named items across
   specifications can overwrite each other), instead of merging silently.
-- A pytest test suite (`tests/`) covering the comparison layer, parsers, report
-  rendering, the CLI entry point, and the update check, with a regression test
-  for every bug fixed in 1.0.1, 1.0.2, and the items above.
+- A pytest test suite (`tests/`) covering the comparison layer, parsers
+  (including the real-world TDM `designMaster` variable format, cross-file
+  category-GUID resolution, spec-macro property binding, and the `.driveprojx`
+  zip-slip guard), report rendering, the CLI entry point, and the update check,
+  with a regression test for every bug fixed in 1.0.1, 1.0.2, and the items above.
 - A **Tests** GitHub Actions workflow that runs pytest on every push and pull
   request (Python 3.10 and 3.12); release builds now run the tests first.
 

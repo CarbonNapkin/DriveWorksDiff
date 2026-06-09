@@ -2,7 +2,10 @@
 and is the regression guard for the Windows file:// URL fix (use as_uri())."""
 
 import sys
+import zipfile
 from pathlib import Path
+
+import pytest
 
 import dw_compare.__main__ as cli
 
@@ -51,6 +54,29 @@ def test_main_no_open_skips_browser(tmp_path, monkeypatch):
 
     assert out.exists()
     assert "url" not in opened  # --no-open must not launch a browser
+
+
+def test_extract_driveprojx_unzips(tmp_path):
+    # A .driveprojx is just a zip; extract_driveprojx should unpack it intact.
+    archive = tmp_path / "p.driveprojx"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("driveProj/project.xml", "<x/>")
+    try:
+        out = cli.extract_driveprojx(archive)
+        assert (out / "driveProj" / "project.xml").read_text() == "<x/>"
+    finally:
+        cli.cleanup_temp_dirs()
+
+
+def test_extract_driveprojx_rejects_zip_slip(tmp_path):  # security regression
+    archive = tmp_path / "evil.driveprojx"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("../escape.txt", "pwned")  # path-traversal member
+    try:
+        with pytest.raises(ValueError):
+            cli.extract_driveprojx(archive)
+    finally:
+        cli.cleanup_temp_dirs()
 
 
 def test_cleanup_temp_dirs_drains_the_list(tmp_path, monkeypatch):  # REGRESSION
