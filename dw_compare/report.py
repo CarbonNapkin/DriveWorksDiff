@@ -447,11 +447,11 @@ def generate_html_report(old_proj: DWProject, new_proj: DWProject,
                 if (badge.classList.contains('badge-added')) {
                     badge.classList.remove('badge-added');
                     badge.classList.add('badge-removed');
-                    badge.textContent = badge.textContent.replace('Added', 'Removed').replace('+', '-');
+                    badge.textContent = badge.textContent.replace('Added', 'Removed').replace('New', 'Old').replace('+', '-');
                 } else {
                     badge.classList.remove('badge-removed');
                     badge.classList.add('badge-added');
-                    badge.textContent = badge.textContent.replace('Removed', 'Added').replace('-', '+');
+                    badge.textContent = badge.textContent.replace('Removed', 'Added').replace('Old', 'New').replace('-', '+');
                 }
             });
             
@@ -465,13 +465,21 @@ def generate_html_report(old_proj: DWProject, new_proj: DWProject,
                     span.classList.add('added');
                 }
             });
+
+            // Swap lookup-grid per-cell and per-column highlight classes.
+            document.querySelectorAll('.cell-added, .cell-removed, .col-added, .col-removed').forEach(el => {
+                if (el.classList.contains('cell-added')) el.classList.replace('cell-added', 'cell-removed');
+                else if (el.classList.contains('cell-removed')) el.classList.replace('cell-removed', 'cell-added');
+                if (el.classList.contains('col-added')) el.classList.replace('col-added', 'col-removed');
+                else if (el.classList.contains('col-removed')) el.classList.replace('col-removed', 'col-added');
+            });
             
-            // Swap summary card values
-            const addedCard = document.querySelector('.stat-added span');
-            const removedCard = document.querySelector('.stat-removed span');
-            const tempVal = addedCard.textContent;
-            addedCard.textContent = removedCard.textContent;
-            removedCard.textContent = tempVal;
+            // Swap the Added/Removed COUNTS only (labels and colors stay put).
+            const addedNum = document.querySelector('.stat-added .stat-num');
+            const removedNum = document.querySelector('.stat-removed .stat-num');
+            const tempVal = addedNum.textContent;
+            addedNum.textContent = removedNum.textContent;
+            removedNum.textContent = tempVal;
             
             // Update button text
             document.getElementById('flipBtn').textContent = flipped ? '🔄 Flip Back' : '🔄 Flip Direction';
@@ -507,6 +515,24 @@ def generate_html_report(old_proj: DWProject, new_proj: DWProject,
                 row.style.display = (statusMatch && searchMatch) ? '' : 'none';
             });
             
+            // Keep a group's identity row visible whenever any row in that
+            // group is still visible, so filtered child rows are not orphaned.
+            document.querySelectorAll('.section-content tbody').forEach(tb => {
+                const rows = Array.from(tb.rows);
+                let i = 0;
+                while (i < rows.length) {
+                    if (!rows[i].classList.contains('group-start')) { i++; continue; }
+                    let j = i + 1;
+                    let anyVisible = rows[i].style.display !== 'none';
+                    while (j < rows.length && !rows[j].classList.contains('group-start')) {
+                        if (rows[j].style.display !== 'none') anyVisible = true;
+                        j++;
+                    }
+                    if (anyVisible) rows[i].style.display = '';
+                    i = j;
+                }
+            });
+
             // Also filter h3 headers (added/removed/modified calc tables have no row body)
             document.querySelectorAll('.section-content h3').forEach(h3 => {
                 let headerStatus = null;

@@ -363,7 +363,12 @@ def parse_component_tasks(path: Path) -> dict:
             if formula_text is not None:
                 rules[rule_name] = formula_text
 
-        key = f"{name}|{comp_id or scope or task_id}"
+        base_key = f"{name}|{comp_id or scope or task_id}"
+        key = base_key
+        dup = 2
+        while key in tasks:
+            key = f"{base_key}#{dup}"
+            dup += 1
         tasks[key] = ComponentTask(
             id=task_id, name=name, task_type=task_type,
             component_id=comp_id, scope=scope, rules=rules

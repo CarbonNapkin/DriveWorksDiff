@@ -4,6 +4,30 @@ All notable changes to DriveWorks Project Compare are documented in this file.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Flip Direction** no longer corrupts the summary cards. It was swapping the
+  card *labels* instead of the counts, leaving a green card labelled "Removed".
+  It now swaps the Added/Removed counts and keeps labels and colors fixed.
+- **Inline diffs are now token-level** instead of word-level. Because DriveWorks
+  formulas rarely contain spaces, any change used to re-highlight the entire
+  formula; now only the changed token (number, identifier, operator) lights up.
+- **Flip Direction is now consistent for lookup-table grids** — per-cell and
+  per-column highlight classes swap, and "New"/"Old" column badges flip too.
+- **Duplicate task / component-task names no longer collapse.** Specification
+  macro tasks (keyed by title + type) and component tasks (keyed by name +
+  component) now disambiguate repeats so a change in a same-named task is not
+  silently dropped.
+- **No more no-op "Modified" rows.** Navigation steps and form/control
+  properties that differ only in a non-displayed field (e.g. the IsStatic flag
+  with an unchanged value) are now treated as unchanged.
+- **Status filtering no longer orphans grouped rows.** A group's identity row
+  (control/task/column name) stays visible whenever any of its child rows pass
+  the filter.
+- Removed em dashes from the report (the "unchanged" status marker).
+
 ## [1.0.0] - 2026-05-15
 
 First public release. Compares two DriveWorks projects and generates a

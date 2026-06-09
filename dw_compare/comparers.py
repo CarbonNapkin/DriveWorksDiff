@@ -4,39 +4,52 @@ Comparison functions for DriveWorks project elements.
 
 import csv
 import io
+import re
 from difflib import SequenceMatcher
 from html import escape
 
 
+# Tokenize a formula/value for a fine-grained diff: quoted strings, identifiers
+# (incl. dotted names), numbers, whitespace runs, or any single other character
+# (operators, parens, commas). Tokens concatenate back to the original string,
+# so the joined diff output reproduces the source exactly.
+_TOKEN_RE = re.compile(r'"[^"]*"|\'[^\']*\'|[A-Za-z_][\w.]*|\d[\d.]*|\s+|.', re.DOTALL)
+
+
+def _tokenize(s: str) -> list:
+    return _TOKEN_RE.findall(s)
+
+
 def inline_diff(old: str, new: str) -> str:
-    """Generate inline HTML diff showing changes"""
+    """Inline HTML diff at the token level. DriveWorks formulas rarely contain
+    spaces, so a word-level diff would re-highlight the whole formula on any
+    change; tokenizing on identifiers / numbers / operators keeps the highlight
+    tight (e.g. only the changed number lights up)."""
     if old == new:
         return escape(new)
-    
+
     if not old:
         return f'<span class="added">{escape(new)}</span>'
     if not new:
         return f'<span class="removed">{escape(old)}</span>'
-    
-    # Use SequenceMatcher for word-level diff
-    old_words = old.split()
-    new_words = new.split()
-    
-    matcher = SequenceMatcher(None, old_words, new_words)
+
+    old_tokens = _tokenize(old)
+    new_tokens = _tokenize(new)
+    matcher = SequenceMatcher(None, old_tokens, new_tokens, autojunk=False)
     result = []
-    
+
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
         if tag == 'equal':
-            result.append(escape(' '.join(old_words[i1:i2])))
+            result.append(escape(''.join(old_tokens[i1:i2])))
         elif tag == 'replace':
-            result.append(f'<span class="removed">{escape(" ".join(old_words[i1:i2]))}</span>')
-            result.append(f'<span class="added">{escape(" ".join(new_words[j1:j2]))}</span>')
+            result.append(f'<span class="removed">{escape("".join(old_tokens[i1:i2]))}</span>')
+            result.append(f'<span class="added">{escape("".join(new_tokens[j1:j2]))}</span>')
         elif tag == 'delete':
-            result.append(f'<span class="removed">{escape(" ".join(old_words[i1:i2]))}</span>')
+            result.append(f'<span class="removed">{escape("".join(old_tokens[i1:i2]))}</span>')
         elif tag == 'insert':
-            result.append(f'<span class="added">{escape(" ".join(new_words[j1:j2]))}</span>')
-    
-    return ' '.join(result)
+            result.append(f'<span class="added">{escape("".join(new_tokens[j1:j2]))}</span>')
+
+    return ''.join(result)
 
 
 def compare_dicts(old: dict, new: dict) -> tuple[set, set, set]:
@@ -77,7 +90,7 @@ def compare_variables(old: dict, new: dict) -> tuple[str, dict]:
                        f'<td class="formula">{diff}</td></tr>')
         else:
             stats['unchanged'] += 1
-            rows.append(f'<tr class="unchanged"><td>{escape(name)}</td><td>—</td>'
+            rows.append(f'<tr class="unchanged"><td>{escape(name)}</td><td>·</td>'
                        f'<td class="formula">{escape(old_v.formula)}</td></tr>')
     
     html = f'''<table>
@@ -114,7 +127,7 @@ def compare_constants(old: dict, new: dict) -> tuple[str, dict]:
                        f'<td>{diff}</td></tr>')
         else:
             stats['unchanged'] += 1
-            rows.append(f'<tr class="unchanged"><td>{escape(name)}</td><td>—</td>'
+            rows.append(f'<tr class="unchanged"><td>{escape(name)}</td><td>·</td>'
                        f'<td>{escape(old_c.value)}</td></tr>')
     
     html = f'''<table>
@@ -156,7 +169,7 @@ def compare_special_vars(old: dict, new: dict) -> tuple[str, dict]:
                        f'<td class="formula">{diff}</td></tr>')
         else:
             stats['unchanged'] += 1
-            rows.append(f'<tr class="unchanged"><td>{escape(name)}</td><td>—</td>'
+            rows.append(f'<tr class="unchanged"><td>{escape(name)}</td><td>·</td>'
                        f'<td class="formula">{escape(old_val)}</td></tr>')
     
     html = f'''<table>
@@ -289,7 +302,7 @@ def compare_component_tasks(old: dict, new: dict) -> tuple[str, dict]:
         else:
             stats['unchanged'] += 1
             rows.append(f'<tr class="unchanged"><td>{escape(old_t.name)}</td><td>{escape(old_t.task_type)}</td>'
-                       f'<td>—</td><td>{escape(old_t.component_id or old_t.scope)}</td></tr>')
+                       f'<td>·</td><td>{escape(old_t.component_id or old_t.scope)}</td></tr>')
     
     html = f'''<table>
         <thead><tr><th>Task Name</th><th>Type</th><th>Status</th><th>Component/Scope</th></tr></thead>
@@ -325,7 +338,7 @@ def compare_documents(old: dict, new: dict) -> tuple[str, dict]:
                        f'<td>{len(new_d["rules"])} rules</td></tr>')
         else:
             stats['unchanged'] += 1
-            rows.append(f'<tr class="unchanged"><td>{escape(name)}</td><td>—</td>'
+            rows.append(f'<tr class="unchanged"><td>{escape(name)}</td><td>·</td>'
                        f'<td>{len(old_d["rules"])} rules</td></tr>')
     
     html = f'''<table>
@@ -548,7 +561,7 @@ def compare_data_tables(old: dict, new: dict) -> tuple[str, dict]:
         else:
             stats['unchanged'] += 1
             rows.append(
-                f'<tr class="unchanged"><td>{escape(name)}</td><td>—</td>'
+                f'<tr class="unchanged"><td>{escape(name)}</td><td>·</td>'
                 f'<td>{escape(new_d.table_type)}</td></tr>'
             )
 
@@ -597,10 +610,12 @@ def compare_nav_steps(old: dict, new: dict) -> tuple[str, dict]:
 
     for name in sorted(common):
         o, n = old[name], new[name]
-        if o != n:
+        o_target, n_target = fmt_target(o), fmt_target(n)
+        type_changed = o.step_type != n.step_type
+        if o_target != n_target or type_changed:
             stats['modified'] += 1
-            diff = inline_diff(fmt_target(o), fmt_target(n))
-            type_cell = escape(n.step_type) if o.step_type == n.step_type else inline_diff(o.step_type, n.step_type)
+            diff = inline_diff(o_target, n_target)
+            type_cell = escape(n.step_type) if not type_changed else inline_diff(o.step_type, n.step_type)
             rows.append(
                 f'<tr class="modified"><td>{escape(name)}</td><td>{type_cell}</td>'
                 f'<td><span class="badge badge-modified">Modified</span></td>'
@@ -610,7 +625,7 @@ def compare_nav_steps(old: dict, new: dict) -> tuple[str, dict]:
             stats['unchanged'] += 1
             rows.append(
                 f'<tr class="unchanged"><td>{escape(name)}</td><td>{escape(n.step_type)}</td>'
-                f'<td>—</td><td class="formula">{escape(fmt_target(n))}</td></tr>'
+                f'<td>·</td><td class="formula">{escape(fmt_target(n))}</td></tr>'
             )
 
     body = ''.join(rows) if rows else '<tr><td colspan="4" class="empty">No navigation steps found</td></tr>'
@@ -619,6 +634,19 @@ def compare_nav_steps(old: dict, new: dict) -> tuple[str, dict]:
         f'<tbody>{body}</tbody></table>'
     )
     return html, stats
+
+
+def _dedupe_labels(labels: list) -> list:
+    """Make repeated task labels unique by appending an occurrence index, so a
+    macro with two same-named tasks (e.g. two 'Create Folder' tasks) does not
+    collapse to one during matching. Deterministic by source order, so the same
+    task lines up across old/new."""
+    seen = {}
+    out = []
+    for lbl in labels:
+        seen[lbl] = seen.get(lbl, 0) + 1
+        out.append(lbl if seen[lbl] == 1 else f'{lbl} #{seen[lbl]}')
+    return out
 
 
 def compare_spec_macros(old: dict, new: dict) -> tuple[str, dict]:
@@ -649,8 +677,8 @@ def compare_spec_macros(old: dict, new: dict) -> tuple[str, dict]:
         o, n = old[name], new[name]
         # Task identity is title + task_type. Position matters too (order),
         # but we surface order by listing tasks in source order with positions.
-        old_keys = [task_label(t) for t in o.tasks]
-        new_keys = [task_label(t) for t in n.tasks]
+        old_keys = _dedupe_labels([task_label(t) for t in o.tasks])
+        new_keys = _dedupe_labels([task_label(t) for t in n.tasks])
 
         old_by_key = {k: t for k, t in zip(old_keys, o.tasks)}
         new_by_key = {k: t for k, t in zip(new_keys, n.tasks)}
@@ -740,6 +768,10 @@ def _compare_prop_dicts(old_props: dict, new_props: dict) -> list:
         if not o_val and not n_val:
             # Both effectively empty (likely a static-flag-only change). Skip
             # to keep the diff readable on real-world projects.
+            continue
+        if o_val == n_val:
+            # Same rendered value (only the IsStatic flag toggled). The report
+            # shows just the value, so this would be a no-op "modified" row.
             continue
         if k not in old_props or o_val == '':
             out.append((k, 'added', o, n))
