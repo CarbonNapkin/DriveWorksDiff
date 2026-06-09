@@ -17,6 +17,7 @@ from pathlib import Path
 from ._version import __version__
 from .parsers import load_project
 from .report import generate_html_report
+from .update_check import check_for_update, RELEASES_PAGE
 
 # Track temp dirs for cleanup
 _temp_dirs = []
@@ -183,6 +184,11 @@ Examples:
     args.output.write_text(html, encoding='utf-8')
     print(f"✅ Report saved to: {args.output}")
     
+    # Free, fail-silent update check (notify only — never downloads/installs).
+    newer = check_for_update()
+    if newer:
+        print(f"\nℹ️  Update available: v{newer} — {RELEASES_PAGE}")
+
     # Auto-open in browser
     if not args.no_open:
         webbrowser.open(f'file://{args.output.resolve()}')

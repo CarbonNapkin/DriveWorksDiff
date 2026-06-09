@@ -20,6 +20,7 @@ from tkinter.scrolledtext import ScrolledText
 from ._version import __version__, __author__, __url__, __license__
 from .parsers import load_project
 from .report import generate_html_report
+from .update_check import check_for_update, RELEASES_PAGE
 
 try:
     from .__main__ import resolve_input
@@ -63,6 +64,7 @@ class CompareApp:
 
         self._build_ui()
         self._drain_log()
+        threading.Thread(target=self._check_updates, daemon=True).start()
 
     def _build_menu(self) -> None:
         """Standard menubar with Help. Integrates with the macOS global menu
@@ -167,6 +169,10 @@ class CompareApp:
 
         frm.columnconfigure(1, weight=1)
         frm.rowconfigure(4, weight=1)
+
+        # Filled by a background update check (notify-only; see _check_updates).
+        self.update_label = tk.Label(frm, text='', bg=bg, fg='#3f51b5', anchor='w', cursor='hand2')
+        self.update_label.grid(row=5, column=1, columnspan=3, sticky='w', padx=8, pady=(0, 6))
 
     def _pick_file(self, target: StringVar) -> None:
         path = filedialog.askopenfilename(
@@ -281,6 +287,16 @@ class CompareApp:
 
     def _on_done(self) -> None:
         self.compare_btn.configure(state=NORMAL, text='Compare')
+
+    def _check_updates(self) -> None:
+        """Free, fail-silent update check; runs off the UI thread on launch."""
+        newer = check_for_update()
+        if newer:
+            self.root.after(0, lambda: self._show_update(newer))
+
+    def _show_update(self, newer: str) -> None:
+        self.update_label.configure(text=f'⬆ Update available: v{newer} — click to download')
+        self.update_label.bind('<Button-1>', lambda _e: webbrowser.open(RELEASES_PAGE))
 
 
 def main() -> None:

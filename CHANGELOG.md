@@ -4,7 +4,14 @@ All notable changes to DriveWorks Project Compare are documented in this file.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.0.1] - 2026-06-09
+
+### Added
+
+- A free, fail-silent update check. On launch (GUI) and after a CLI run, the app
+  queries the GitHub Releases API and shows a "newer version available" notice
+  linking to the download page. It only notifies — it never downloads or
+  installs — and is silent when offline.
 
 ### Fixed
 
@@ -70,4 +77,5 @@ self-contained HTML diff report.
 - Self-contained HTML output suitable for sharing by email or hosting on
   an internal share.
 
+[1.0.1]: https://github.com/CarbonNapkin/DriveWorksDiff/releases/tag/v1.0.1
 [1.0.0]: https://github.com/CarbonNapkin/DriveWorksDiff/releases/tag/v1.0.0
