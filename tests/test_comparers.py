@@ -8,7 +8,6 @@ from dw_compare.comparers import (
     compare_documents,
     compare_component_tasks,
     compare_calc_tables,
-    compare_special_vars,
     compare_nav_steps,
     compare_spec_macros,
     compare_forms,
@@ -175,7 +174,7 @@ def test_form_real_prop_change_is_modified():
     assert "VisibleRule" in html
 
 
-# ---------- lookup / data / special vars ----------
+# ---------- lookup / data ----------
 
 def test_lookup_table_cell_change_is_modified():
     old = {"L": "Material,Cost\nSteel,2.5\nAlu,4.1"}
@@ -183,13 +182,19 @@ def test_lookup_table_cell_change_is_modified():
     _, stats = compare_lookup_tables(old, new)
     assert stats["modified"] == 1
 
+def test_lookup_table_duplicate_column_headers_not_collapsed():  # REGRESSION
+    # Two columns share the header "Val". The change is only in the SECOND
+    # "Val" column; a name->index map would collapse both to the last column
+    # and either miss the change or attribute it to the wrong column.
+    old = {"L": "Key,Val,Val\nA,1,2\nB,3,4"}
+    new = {"L": "Key,Val,Val\nA,1,9\nB,3,4"}   # row A: second Val 2 -> 9
+    html, stats = compare_lookup_tables(old, new)
+    assert stats["modified"] == 1
+    assert "cell-changed" in html
+    assert '<span class="removed">2</span>' in html  # the real, second-column change
+    assert '<span class="added">9</span>' in html
+
 def test_data_table_type_change_is_modified():
     _, stats = compare_data_tables({"D": DataTableDef("D", table_type="A")},
                                    {"D": DataTableDef("D", table_type="B")})
-    assert stats["modified"] == 1
-
-def test_special_vars_rule_change_is_modified():
-    old = {"R": {"value": "", "rule": '="A"'}}
-    new = {"R": {"value": "", "rule": '="B"'}}
-    _, stats = compare_special_vars(old, new)
     assert stats["modified"] == 1

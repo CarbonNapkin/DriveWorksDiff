@@ -178,48 +178,6 @@ def compare_constants(old: dict, new: dict) -> tuple[str, dict]:
     return html, stats
 
 
-def compare_special_vars(old: dict, new: dict) -> tuple[str, dict]:
-    """Compare special variables"""
-    added, removed, common = compare_dicts(old, new)
-    stats = {'added': len(added), 'removed': len(removed), 'modified': 0, 'unchanged': 0}
-    
-    rows = []
-    
-    for name in sorted(added):
-        sv = new[name]
-        val = sv['rule'] or sv['value']
-        rows.append(f'<tr class="added"><td>{escape(name)}</td><td><span class="badge badge-added">Added</span></td>'
-                   f'<td class="formula">{escape(val)}</td></tr>')
-    
-    for name in sorted(removed):
-        sv = old[name]
-        val = sv['rule'] or sv['value']
-        rows.append(f'<tr class="removed"><td>{escape(name)}</td><td><span class="badge badge-removed">Removed</span></td>'
-                   f'<td class="formula">{escape(val)}</td></tr>')
-    
-    for name in sorted(common):
-        old_sv, new_sv = old[name], new[name]
-        old_val = old_sv['rule'] or old_sv['value']
-        new_val = new_sv['rule'] or new_sv['value']
-        
-        if old_val != new_val:
-            stats['modified'] += 1
-            diff = inline_diff(old_val, new_val)
-            rows.append(f'<tr class="modified"><td>{escape(name)}</td><td><span class="badge badge-modified">Modified</span></td>'
-                       f'<td class="formula">{diff}</td></tr>')
-        else:
-            stats['unchanged'] += 1
-            rows.append(f'<tr class="unchanged"><td>{escape(name)}</td><td>·</td>'
-                       f'<td class="formula">{escape(old_val)}</td></tr>')
-    
-    html = f'''<table>
-        <thead><tr><th>Special Variable</th><th>Status</th><th>Value / Rule</th></tr></thead>
-        <tbody>{"".join(rows) if rows else '<tr><td colspan="3" class="empty">No special variables found</td></tr>'}</tbody>
-    </table>'''
-    
-    return html, stats
-
-
 def _calc_row(col: str, scope: str, status: str, old_val: str, new_val: str,
               first_in_group: bool = False) -> str:
     """Emit one row of a calculation-table diff. The Column cell is blanked
@@ -434,20 +392,32 @@ def _render_lookup_grid(name: str, top_status: str, old_body: str, new_body: str
     old_headers, old_rows = _parse_csv_table(old_body)
     new_headers, new_rows = _parse_csv_table(new_body)
 
-    old_set = set(old_headers)
-    new_set = set(new_headers)
-
-    # Column display order: new headers first, then any old-only headers at
-    # the end so removed columns are visible but do not push everything around.
-    display_cols = []
-    for h in new_headers:
-        display_cols.append((h, 'added' if h not in old_set else 'common'))
-    for h in old_headers:
-        if h not in new_set:
-            display_cols.append((h, 'removed'))
-
-    old_col_idx = {h: i for i, h in enumerate(old_headers)}
-    new_col_idx = {h: i for i, h in enumerate(new_headers)}
+    # Build the display columns positionally so duplicate header names are not
+    # collapsed (a name->index map would keep only the last index for a repeated
+    # header and silently diff every duplicate against the same source column).
+    # New columns come first (in order), then any old-only columns. Old columns
+    # match new ones by name, consuming matches left to right so repeated names
+    # pair up by position. Each entry carries its own source indices, so the body
+    # never re-looks-up a column by name.
+    old_positions = {}
+    for i, h in enumerate(old_headers):
+        old_positions.setdefault(h, []).append(i)
+    consumed = {}
+    matched_old = set()
+    display_cols = []  # (header, status, old_idx, new_idx)
+    for j, h in enumerate(new_headers):
+        avail = old_positions.get(h, [])
+        k = consumed.get(h, 0)
+        if k < len(avail):
+            oi = avail[k]
+            consumed[h] = k + 1
+            matched_old.add(oi)
+            display_cols.append((h, 'common', oi, j))
+        else:
+            display_cols.append((h, 'added', None, j))
+    for i, h in enumerate(old_headers):
+        if i not in matched_old:
+            display_cols.append((h, 'removed', i, None))
 
     # Row keys = first column. If duplicates exist, fall back to row index.
     old_keys = [r[0] if r else '' for r in old_rows]
@@ -493,7 +463,7 @@ def _render_lookup_grid(name: str, top_status: str, old_body: str, new_body: str
 
     # Header row with per-column status badges
     header_cells = []
-    for h, s in display_cols:
+    for h, s, _oi, _nj in display_cols:
         suffix = ''
         if s == 'added':
             suffix = ' <span class="badge badge-added">New</span>'
@@ -506,9 +476,7 @@ def _render_lookup_grid(name: str, top_status: str, old_body: str, new_body: str
     body_rows = []
     for status, old_row, new_row in diff_rows:
         cells = []
-        for h, col_status in display_cols:
-            old_idx = old_col_idx.get(h)
-            new_idx = new_col_idx.get(h)
+        for h, col_status, old_idx, new_idx in display_cols:
             old_val = _row_at(old_row, old_idx) if old_row is not None else ''
             new_val = _row_at(new_row, new_idx) if new_row is not None else ''
 

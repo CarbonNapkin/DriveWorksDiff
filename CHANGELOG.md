@@ -18,9 +18,15 @@ and the project uses [Semantic Versioning](https://semver.org/).
   letters / backslashes) and left spaces unescaped. It now uses `Path.as_uri()`.
 - `.driveprojx` temp-directory cleanup now drains its tracking list, so repeated
   comparisons in the GUI don't re-attempt deletion of already-removed folders.
+- Lookup tables with **duplicate column-header names** are now diffed per
+  column. Columns were keyed by header name, so repeated names collapsed to the
+  last one and could miss a change or attribute it to the wrong column; columns
+  are now matched positionally.
 
 ### Removed
 
+- The **Special Variables** section. It added noise without signal for project
+  comparison, so it is no longer parsed or shown.
 - The **Flip Direction** button. The report already shows additions and removals
   side by side, so flipping only relabeled and recolored — while being a
   recurring source of subtle display bugs. Removed in favor of re-running with
@@ -28,6 +34,9 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Loading a project with **multiple/nested specifications** now prints a notice
+  that their contents are merged into one view (identically named items across
+  specifications can overwrite each other), instead of merging silently.
 - A pytest test suite (`tests/`) covering the comparison layer, parsers, report
   rendering, the CLI entry point, and the update check, with a regression test
   for every bug fixed in 1.0.1, 1.0.2, and the items above.

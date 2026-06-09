@@ -73,9 +73,9 @@ def test_parse_design_master(tmp_path):
     p.write_text(DESIGN_XML, encoding="utf-8")
     data = parse_design_master(p)
     assert data["constants"]["M"].value == "2"
-    assert data["special_vars"]["R"]["rule"] == '="A"'
     assert "L" in data["lookup_tables"]
     assert "Start" in data["nav_steps"]
+    assert "special_vars" not in data  # Special Variables are no longer parsed
 
 
 def test_parse_component_tasks(tmp_path):
@@ -86,6 +86,17 @@ def test_parse_component_tasks(tmp_path):
     task = next(iter(tasks.values()))
     assert task.name == "Gen"
     assert task.rules["Tmpl"] == '="A3"'
+
+
+def test_load_project_warns_on_multiple_specs(tmp_path, capsys):
+    # Two nested specifications get merged into one flat view; load_project
+    # should surface that rather than merging silently.
+    for sub in ("specA", "specB"):
+        d = tmp_path / sub
+        d.mkdir()
+        (d / "project.xml").write_text(PROJECT_XML, encoding="utf-8")
+    load_project(tmp_path)
+    assert "Multiple specifications" in capsys.readouterr().out
 
 
 def test_load_project_end_to_end(tmp_path):

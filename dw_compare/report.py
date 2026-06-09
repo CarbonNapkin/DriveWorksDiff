@@ -11,7 +11,6 @@ from .models import DWProject
 from .comparers import (
     compare_variables,
     compare_constants,
-    compare_special_vars,
     compare_calc_tables,
     compare_component_tasks,
     compare_documents,
@@ -42,7 +41,6 @@ def generate_html_report(old_proj: DWProject, new_proj: DWProject,
     section_defs = [
         ('Variables', compare_variables, old_proj.variables, new_proj.variables),
         ('Constants', compare_constants, old_proj.constants, new_proj.constants),
-        ('Special Variables', compare_special_vars, old_proj.special_vars, new_proj.special_vars),
         ('Calculation Tables', compare_calc_tables, old_proj.calc_tables, new_proj.calc_tables),
         ('Component Tasks', compare_component_tasks, old_proj.component_tasks, new_proj.component_tasks),
         ('Documents', compare_documents, old_proj.documents, new_proj.documents),

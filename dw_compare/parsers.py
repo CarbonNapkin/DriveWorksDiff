@@ -258,7 +258,6 @@ def parse_design_master(path: Path) -> dict:
     """Parse designMaster.xml (or TDM format) for constants, special vars, lookup tables, variables, and navigation steps."""
     data = {
         'constants': {},
-        'special_vars': {},
         'lookup_tables': {},
         'variables': {},
         'nav_steps': {},
@@ -282,15 +281,6 @@ def parse_design_master(path: Path) -> dict:
             data['constants'][display_name] = Constant(
                 name=display_name, store_name=store, value=value, comment=comment
             )
-    
-    # Parse Special Variables - attribute-based format
-    for sv in root.findall('.//SpecialVariable'):
-        store = sv.get('StoreName', '')
-        value = sv.get('Value', '')
-        rule = sv.get('Rule', '')
-        
-        if store:
-            data['special_vars'][store] = {'value': value, 'rule': rule}
     
     # Parse Variables from TDM format (attribute-based)
     for var in root.findall('.//Variable'):
@@ -384,8 +374,20 @@ def load_project(folder: Path) -> DWProject:
     """Load all DriveWorks project files from a folder (recursively)"""
     proj = DWProject()
 
-    # Recursively find all project.xml files
-    for proj_file in folder.rglob('project.xml'):
+    project_files = sorted(folder.rglob('project.xml'))
+    design_files = sorted(folder.rglob('designMaster.xml')) + sorted(folder.rglob('*.tdm'))
+    task_files = sorted(folder.rglob('componentTasks.xml'))
+
+    # A standard project has one project.xml and one design master. More than
+    # one usually means embedded/nested specifications, whose contents are
+    # merged into a single flat view here. Surface that, since same-named items
+    # across specifications overwrite each other on merge.
+    if len(project_files) > 1 or len(design_files) > 1:
+        print(f"  ⚠ Multiple specifications detected ({len(project_files)} project.xml, "
+              f"{len(design_files)} design master(s)). Their contents are merged into one "
+              f"view; identically named items across specifications may overwrite each other.")
+
+    for proj_file in project_files:
         print(f"  Found: {proj_file}")
         data = parse_project_xml(proj_file)
         proj.variables.update(data['variables'])
@@ -396,28 +398,15 @@ def load_project(folder: Path) -> DWProject:
         proj.categories.update(data.get('categories', {}))
         proj.forms.update(data.get('forms', {}))
 
-    # Recursively find all designMaster.xml files
-    for dm_file in folder.rglob('designMaster.xml'):
+    for dm_file in design_files:
         print(f"  Found: {dm_file}")
         data = parse_design_master(dm_file)
         proj.constants.update(data['constants'])
-        proj.special_vars.update(data['special_vars'])
         proj.lookup_tables.update(data['lookup_tables'])
         proj.variables.update(data.get('variables', {}))
         proj.nav_steps.update(data.get('nav_steps', {}))
 
-    # Recursively find all TDM files
-    for tdm_file in folder.rglob('*.tdm'):
-        print(f"  Found: {tdm_file}")
-        data = parse_design_master(tdm_file)
-        proj.constants.update(data['constants'])
-        proj.special_vars.update(data['special_vars'])
-        proj.lookup_tables.update(data['lookup_tables'])
-        proj.variables.update(data.get('variables', {}))
-        proj.nav_steps.update(data.get('nav_steps', {}))
-
-    # Recursively find all componentTasks.xml files
-    for ct_file in folder.rglob('componentTasks.xml'):
+    for ct_file in task_files:
         print(f"  Found: {ct_file}")
         proj.component_tasks.update(parse_component_tasks(ct_file))
 

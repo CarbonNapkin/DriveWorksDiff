@@ -93,7 +93,6 @@ class DWProject:
     name: str = ""
     variables: dict = field(default_factory=dict)
     constants: dict = field(default_factory=dict)
-    special_vars: dict = field(default_factory=dict)
     calc_tables: dict = field(default_factory=dict)
     component_tasks: dict = field(default_factory=dict)
     documents: dict = field(default_factory=dict)

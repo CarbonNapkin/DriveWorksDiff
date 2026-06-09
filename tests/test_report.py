@@ -36,6 +36,11 @@ def test_report_stamps_version():
     assert __version__ in html
 
 
+def test_report_has_no_special_variables_section():  # REGRESSION (section removed)
+    html = generate_html_report(DWProject(), DWProject(), "a", "b")
+    assert "Special Variable" not in html
+
+
 def test_report_has_no_flip_direction():  # REGRESSION (flip removed — recurring bug source)
     html = generate_html_report(DWProject(), DWProject(), "a", "b")
     assert "flipDirection" not in html
